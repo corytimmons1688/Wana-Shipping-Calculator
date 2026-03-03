@@ -1,6 +1,6 @@
 export const T = {
-  BG: "#08081a", S1: "#0e0e24", S2: "#14143a", BD: "#222250",
-  TX: "#d0d0e0", T2: "#7777aa", AC: "#7cb3ff", GR: "#66bb6a", AM: "#ffb74d", PU: "#ab47bc",
+  BG: "#f5f5f8", S1: "#ffffff", S2: "#eef0f4", BD: "#d0d4dd",
+  TX: "#1a1a2e", T2: "#6b7280", AC: "#2563eb", GR: "#16a34a", AM: "#d97706", PU: "#9333ea",
 };
 export const tbl = { width: "100%", borderCollapse: "collapse", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" };
 export const th = { padding: "7px 8px", textAlign: "left", borderBottom: "2px solid " + T.BD, color: T.T2, fontWeight: 600, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.5px", position: "sticky", top: 0, background: T.S1, zIndex: 1 };
