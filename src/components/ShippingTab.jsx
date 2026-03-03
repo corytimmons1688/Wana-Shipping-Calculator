@@ -43,7 +43,7 @@ export default function ShippingTab({ ships, prod, frt }) {
           {ships.map((sh,i) => {
             const cpu = sh.tQ>0 ? sh.cost/sh.tQ : 0;
             return (
-              <tr key={i} style={{ background: i%2===0?"transparent":T.S2+"28" }}>
+              <tr key={i} style={{ background: i%2===0?"transparent":T.S2 }}>
                 <td style={{ ...td, color:T.T2 }}>{i+1}</td>
                 <td style={{ ...td, fontWeight:600 }}>{MO[sh.mo]}</td>
                 <td style={td}><Bg method={sh.meth}/></td>
@@ -65,7 +65,7 @@ export default function ShippingTab({ ships, prod, frt }) {
           <tr><th style={{ ...th, textAlign:"right" }}>Weekly</th><th style={{ ...th, textAlign:"right" }}>Cumul</th><th style={{ ...th, textAlign:"right" }}>Surplus</th><th style={{ ...th, textAlign:"right" }}>Weekly</th><th style={{ ...th, textAlign:"right" }}>Cumul</th><th style={{ ...th, textAlign:"right" }}>Surplus</th><th style={{ ...th, textAlign:"right" }}>Total</th><th style={{ ...th, textAlign:"right" }}>Shippable</th></tr>
         </thead><tbody>
           {prod.filter(w => w.bW>0||w.lW>0||w.bC>0).map((w,i) => (
-            <tr key={i} style={{ background: i%2===0?"transparent":T.S2+"28" }}>
+            <tr key={i} style={{ background: i%2===0?"transparent":T.S2 }}>
               <td style={td}>{dF(w.wk)}</td>
               <td style={{ ...td, textAlign:"right", color:w.bW>0?T.GR:T.T2 }}>{fm(w.bW)}</td>
               <td style={{ ...td, textAlign:"right" }}>{fm(w.bC)}</td>
