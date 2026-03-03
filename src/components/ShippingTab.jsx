@@ -46,7 +46,7 @@ export default function ShippingTab({ ships, prod, frt }) {
               <tr key={i} style={{ background: i%2===0?"transparent":T.S2 }}>
                 <td style={{ ...td, color:T.T2 }}>{i+1}</td>
                 <td style={{ ...td, fontWeight:600 }}>{MO[sh.mo]}</td>
-                <td style={td}><Bg method={sh.meth}/></td>
+                <td style={td}><Bg method={sh.meth}/>{sh.preShip && <span style={{ marginLeft:4, fontSize:8, color:T.GR, fontWeight:700 }} title="Pre-shipped ahead of schedule">PRE</span>}{sh.consolidated && <span style={{ marginLeft:4, fontSize:8, color:T.AM, fontWeight:700 }} title="Consolidated across months">COMB</span>}</td>
                 <td style={{ ...td, color:T.T2, fontSize:11 }}>{sh.cn}</td>
                 <td style={{ ...td, textAlign:"right", color:T.GR, fontWeight:600 }}>{fm(sh.bQ)}</td>
                 <td style={{ ...td, textAlign:"right", color:T.AC, fontWeight:600 }}>{fm(sh.lQ)}</td>
