@@ -167,75 +167,116 @@ export function optimize(mkts, molds, ship, par, cont) {
     }
   }
 
-  // ── PHASE 3: Fast Boat with cross-month consolidation ──
-  // Collect all remaining demand, group by similar ship dates, and consolidate into fewer containers
+  // ── PHASE 3: Fast Boat with separate base/lid ship dates ──
+  // Key insight: Bases need 14-day lead, Lids need 7-day lead.
+  // By shipping them separately, lids get 7 more production days.
+  // This can convert Air shipments to Fast Boat.
   if (fb) {
-    // Build a list of all remaining needs with their ship dates
-    const fbNeeds = [];
     for (const d of demands) {
       if (d.bNeed <= 0 && d.lNeed <= 0) continue;
-      const fShipDate = shipDate(d.bDeadline, fb.transitDays);
-      const avail = prodAt(prod, fShipDate);
-      const canB = Math.min(Math.max(0, avail.bC - bS), d.bNeed);
-      const canL = Math.min(Math.max(0, avail.lC - lS), d.lNeed);
-      if (canB + canL > 0) {
-        fbNeeds.push({ mo: d.mo, bNeed: canB, lNeed: canL, shipDate: fShipDate, bDeadline: d.bDeadline, lDeadline: d.lDeadline, demRef: d });
-      }
-    }
 
-    // Consolidation: try to combine adjacent months into shared containers
-    // Sort by ship date
-    fbNeeds.sort((a, b) => a.shipDate - b.shipDate);
+      // Separate ship dates for base and lid
+      const bShipDate = shipDate(d.bDeadline, fb.transitDays);
+      const lShipDate = shipDate(d.lDeadline, fb.transitDays);
 
-    // Greedy: accumulate needs and ship when we have enough for optimal container
-    let accumB = 0, accumL = 0;
-    const accumItems = [];
+      // Available production at each ship date
+      const bAvail = prodAt(prod, bShipDate);
+      const lAvail = prodAt(prod, lShipDate);
 
-    for (let i = 0; i < fbNeeds.length; i++) {
-      const need = fbNeeds[i];
-      accumB += need.bNeed;
-      accumL += need.lNeed;
-      accumItems.push(need);
+      let canB = Math.min(Math.max(0, bAvail.bC - bS), d.bNeed);
+      let canL = Math.min(Math.max(0, lAvail.lC - lS), d.lNeed);
 
-      const isLast = i === fbNeeds.length - 1;
-      // Ship when: we have enough for a 40'HC, or it's the last batch, 
-      // or next month's ship date is >14 days away (can't consolidate further)
-      const nextFar = !isLast && (fbNeeds[i + 1].shipDate - need.shipDate > 14 * 864e5);
+      // Strategy A: Ship together (use earlier base ship date for both)
+      // Strategy B: Ship separately (base on bShipDate, lid on lShipDate)
+      // Pick whichever fills more containers and costs less
 
-      if (accumB + accumL >= cont["40HC"].max || isLast || nextFar) {
-        // Ship everything accumulated
-        let remB = accumB, remL = accumL;
-        // Use the LATEST ship date in the batch (most urgent)
-        const latestItem = accumItems[accumItems.length - 1];
+      // Try combined first (using base ship date - earlier, less lid production)
+      const combAvailL = Math.min(Math.max(0, bAvail.lC - lS), d.lNeed);
+      const combTotal = canB + combAvailL;
 
-        while (remB + remL > 0) {
-          let cn, cc, cx;
-          if (remB + remL > cont["20HC"].max) {
-            cn = "40' HC"; cc = cont["40HC"].cost; cx = cont["40HC"].max;
+      // Try separate: base-only containers + lid-only containers
+      const sepTotal = canB + canL;
+
+      // Compare: how many containers each approach needs
+      function containerCost(total) {
+        if (total <= 0) return 0;
+        let c = 0, rem = total;
+        while (rem > 0) {
+          if (rem > cont["20HC"].max) {
+            c += cont["40HC"].cost; rem -= cont["40HC"].max;
+          } else if (rem >= cont["20HC"].min) {
+            c += cont["20HC"].cost; rem = 0;
           } else {
-            cn = "20' HC"; cc = cont["20HC"].cost; cx = cont["20HC"].max;
-          }
-          const sq = Math.min(remB + remL, cx);
-          const bQ = Math.min(remB, sq);
-          const lQ = Math.min(remL, sq - bQ);
-          if (bQ + lQ <= 0) break;
-
-          res.push({ mo: latestItem.mo, meth: "Fast Boat", cn, bQ, lQ, tQ: bQ + lQ, cost: cc,
-            bSd: new Date(latestItem.shipDate), lSd: new Date(latestItem.shipDate),
-            bAr: new Date(latestItem.bDeadline), lAr: new Date(latestItem.lDeadline),
-            consolidated: accumItems.length > 1 });
-
-          bS += bQ; lS += lQ; remB -= bQ; remL -= lQ;
-          // Deduct from demand refs
-          let bDed = bQ, lDed = lQ;
-          for (const item of accumItems) {
-            const bd = Math.min(bDed, item.demRef.bNeed);
-            const ld = Math.min(lDed, item.demRef.lNeed);
-            item.demRef.bNeed -= bd; item.demRef.lNeed -= ld;
-            bDed -= bd; lDed -= ld;
+            break; // Below minimum, can't ship via FB
           }
         }
-        accumB = 0; accumL = 0; accumItems.length = 0;
+        return c;
+      }
+
+      // How much would go to Air under each strategy
+      const combAir = Math.max(0, d.bNeed - canB) + Math.max(0, d.lNeed - combAvailL);
+      const sepAir = Math.max(0, d.bNeed - canB) + Math.max(0, d.lNeed - canL);
+      const ar2 = ship.find(s => s.method === "Air");
+      const airCPU = ar2 ? ar2.costPerUnit : 0.80;
+
+      const combCost = containerCost(combTotal) + combAir * airCPU;
+      const sepCost = containerCost(canB) + containerCost(canL) + sepAir * airCPU;
+
+      if (sepCost < combCost && canL > combAvailL) {
+        // SEPARATE is cheaper: ship bases and lids independently
+        // Ship bases
+        let remB = canB;
+        while (remB > 0) {
+          let cn, cc, cx;
+          if (remB > cont["20HC"].max) {
+            cn = "40' HC"; cc = cont["40HC"].cost; cx = cont["40HC"].max;
+          } else if (remB >= cont["20HC"].min) {
+            cn = "20' HC"; cc = cont["20HC"].cost; cx = cont["20HC"].max;
+          } else { break; }
+          const bQ = Math.min(remB, cx);
+          if (bQ <= 0) break;
+          res.push({ mo: d.mo, meth: "Fast Boat", cn, bQ, lQ: 0, tQ: bQ, cost: cc,
+            bSd: new Date(bShipDate), lSd: new Date(bShipDate),
+            bAr: new Date(d.bDeadline), lAr: new Date(d.bDeadline) });
+          bS += bQ; d.bNeed -= bQ; remB -= bQ;
+        }
+        // Ship lids
+        let remL = canL;
+        while (remL > 0) {
+          let cn, cc, cx;
+          if (remL > cont["20HC"].max) {
+            cn = "40' HC"; cc = cont["40HC"].cost; cx = cont["40HC"].max;
+          } else if (remL >= cont["20HC"].min) {
+            cn = "20' HC"; cc = cont["20HC"].cost; cx = cont["20HC"].max;
+          } else { break; }
+          const lQ = Math.min(remL, cx);
+          if (lQ <= 0) break;
+          res.push({ mo: d.mo, meth: "Fast Boat", cn, bQ: 0, lQ, tQ: lQ, cost: cc,
+            bSd: new Date(lShipDate), lSd: new Date(lShipDate),
+            bAr: new Date(d.lDeadline), lAr: new Date(d.lDeadline) });
+          lS += lQ; d.lNeed -= lQ; remL -= lQ;
+        }
+      } else {
+        // COMBINED is cheaper or same: ship together on base ship date
+        let remB = canB, remL2 = combAvailL;
+        let rem = remB + remL2;
+        while (rem > 0) {
+          let cn, cc, cx;
+          if (rem > cont["20HC"].max) {
+            cn = "40' HC"; cc = cont["40HC"].cost; cx = cont["40HC"].max;
+          } else if (rem >= cont["20HC"].min) {
+            cn = "20' HC"; cc = cont["20HC"].cost; cx = cont["20HC"].max;
+          } else { break; }
+          const sq = Math.min(rem, cx);
+          const bQ = Math.min(remB, sq);
+          const lQ = Math.min(remL2, sq - bQ);
+          if (bQ + lQ <= 0) break;
+          res.push({ mo: d.mo, meth: "Fast Boat", cn, bQ, lQ, tQ: bQ + lQ, cost: cc,
+            bSd: new Date(bShipDate), lSd: new Date(bShipDate),
+            bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline) });
+          bS += bQ; lS += lQ; d.bNeed -= bQ; d.lNeed -= lQ;
+          remB -= bQ; remL2 -= lQ; rem -= (bQ + lQ);
+        }
       }
     }
   }
@@ -253,6 +294,18 @@ export function optimize(mkts, molds, ship, par, cont) {
           bSd: new Date(aShp), lSd: new Date(aShp), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline) });
         bS += bQ; lS += lQ; d.bNeed -= bQ; d.lNeed -= lQ;
       }
+    }
+  }
+
+
+  // Fix arrival dates: actual arrival = ship date + transit days (same for both components)
+  for (const sh of res) {
+    const m = ship.find(s => s.method === sh.meth);
+    if (m) {
+      const arr = new Date(sh.bSd);
+      arr.setDate(arr.getDate() + m.transitDays);
+      sh.bAr = new Date(arr);
+      sh.lAr = new Date(arr);
     }
   }
 
