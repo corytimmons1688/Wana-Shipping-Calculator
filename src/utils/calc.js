@@ -210,17 +210,22 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   }
 
   // ═══════════════════════════════════════════════════════
-  // PHASE 4: Air for anything remaining (split pricing)
+  // PHASE 4: Air for anything remaining (split pricing, air pallet rounding)
   // ═══════════════════════════════════════════════════════
   if (ar) {
+    const abPP = pal.airBasePP || 7500;
+    const alPP = pal.airLidPP || 25000;
     for (const d of demands) {
       if (d.bNeed <= 0 && d.lNeed <= 0) continue;
       const aSD = sd(d.bDeadline, ar.transitDays);
-      const bQ = Math.ceil(Math.max(d.bNeed, 0) / par.rounding) * par.rounding;
-      const lQ = Math.ceil(Math.max(d.lNeed, 0) / par.rounding) * par.rounding;
+      const bQ = d.bNeed > 0 ? Math.ceil(d.bNeed / abPP) * abPP : 0;
+      const lQ = d.lNeed > 0 ? Math.ceil(d.lNeed / alPP) * alPP : 0;
       if (bQ + lQ > 0) {
+        const bPal = bQ > 0 ? Math.ceil(bQ / abPP) : 0;
+        const lPal = lQ > 0 ? Math.ceil(lQ / alPP) : 0;
         res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ, lQ, tQ: bQ + lQ, cost: bQ * airCost.base + lQ * airCost.lid,
-          bSd: new Date(aSD), lSd: new Date(aSD), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline) });
+          bSd: new Date(aSD), lSd: new Date(aSD), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline),
+          bPal, lPal });
         bS += bQ; lS += lQ; d.bNeed -= bQ; d.lNeed -= lQ;
       }
     }
