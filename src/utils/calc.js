@@ -98,9 +98,12 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
       while (cB + cL > 0) {
         const sp = splitPallets(cc.pallets, cc.bPP, cc.lPP, cB, cL);
         if (sp.bQ + sp.lQ <= 0) break;
-        const bFull = sp.bPallets === 0 || sp.bQ >= sp.bPallets * cc.bPP * 0.95;
-        const lFull = sp.lPallets === 0 || sp.lQ >= sp.lPallets * cc.lPP * 0.95;
-        if (!bFull || !lFull) break;
+        // Full container = all pallets allocated have product on them
+        // At least use all pallets in the container (no empty pallets)
+        var totalPal = sp.bPallets + sp.lPallets;
+        if (totalPal < cc.pallets) break;
+        if (sp.bPallets > 0 && sp.bQ <= 0) break;
+        if (sp.lPallets > 0 && sp.lQ <= 0) break;
         res.push({ mo: d.mo, meth: "Standard Ocean", cn: cont[ck].label, bQ: sp.bQ, lQ: sp.lQ, tQ: sp.bQ + sp.lQ, cost: 0,
           bSd: new Date(oSD), lSd: new Date(oSD), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline),
           preShip: !!label, bPal: sp.bPallets, lPal: sp.lPallets });
