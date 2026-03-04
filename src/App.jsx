@@ -68,7 +68,7 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"shipping", l:
           {mainTabs.map(t => { const a = tab === t.k; return <button key={t.k} onClick={() => setTab(t.k)} style={{ padding:"9px 16px", cursor:"pointer", border:"none", borderBottom:a ? "2px solid "+T.AC : "2px solid transparent", background:"transparent", color:a ? T.AC : T.T2, fontWeight:a ? 700 : 500, fontSize:12, display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", fontFamily:"inherit" }}><span>{t.i}</span>{t.l}</button>; })}
         </div>
         {tab === "demand" && <DemandTab sc={sc} gld={gld} annD={annD} upd={upd} />}
-        {tab === "shipping" && <ShippingTab ships={ships} prod={prod} frt={frt} />}
+        {tab === "shipping" && <ShippingTab ships={ships} prod={prod} frt={frt} gld={gld} />}
         {tab === "settings" && <SettingsTab sc={sc} cap={cap} upd={upd} />}
       </>)}
     </div>
