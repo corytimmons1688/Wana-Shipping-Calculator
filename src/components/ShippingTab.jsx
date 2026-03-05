@@ -123,31 +123,31 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
       </div>
 
       {sv==="unified" && (
-        <div style={{ overflowX:"auto" }}>
+        <div style={{ overflowX:"auto", maxHeight:"calc(100vh - 240px)", overflowY:"auto" }}>
           <table style={tbl}>
             <thead>
               <tr>
-                <th style={th} rowSpan={2}>Week Of</th>
-                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.GR, color:T.GR }} colSpan={4}>Production</th>
-                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC }} colSpan={5}>Shipping</th>
-                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AM, color:T.AM }} colSpan={6}>Inventory at Calyx</th>
+                <th style={{ ...th, top:0, zIndex:3 }} rowSpan={2}>Week Of</th>
+                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.GR, color:T.GR, top:0, zIndex:3 }} colSpan={4}>Production</th>
+                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC, top:0, zIndex:3 }} colSpan={5}>Shipping</th>
+                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AM, color:T.AM, top:0, zIndex:3 }} colSpan={6}>Inventory at Calyx</th>
               </tr>
               <tr>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR }}>Base Wk</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC }}>Lid Wk</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR }}>Base Cum</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC }}>Lid Cum</th>
-                <th style={{ ...th, textAlign:"left", fontSize:9 }}>Method</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR }}>Bases</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC }}>Lids</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9 }}>Cost</th>
-                <th style={{ ...th, textAlign:"left", fontSize:9 }}>Arrival</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR }}>Base Arr</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC }}>Lid Arr</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9 }}>Demand</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR }}>Base Stk</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC }}>Lid Stk</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9 }}>Mo. Stock</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Wk</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Wk</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Cum</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Cum</th>
+                <th style={{ ...th, textAlign:"left", fontSize:9, top:28, zIndex:2 }}>Method</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Bases</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lids</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Cost</th>
+                <th style={{ ...th, textAlign:"left", fontSize:9, top:28, zIndex:2 }}>Arrival</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Arr</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Arr</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Demand</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Stk</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Stk</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Mo. Stock</th>
               </tr>
             </thead>
             <tbody>
@@ -203,7 +203,7 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
       )}
 
       {sv==="shipments" && (
-        <div style={{ overflowX:"auto" }}><table style={tbl}><thead><tr>
+        <div style={{ overflowX:"auto", maxHeight:"calc(100vh - 240px)", overflowY:"auto" }}><table style={tbl}><thead><tr>
           <th style={th}>#</th><th style={th}>Mo.</th><th style={th}>Method</th><th style={th}>Container</th><th style={{ ...th, textAlign:"center" }}>Pallets</th>
           <th style={{ ...th, textAlign:"right", color:T.GR }}>Bases</th><th style={{ ...th, textAlign:"right", color:T.AC }}>Lids</th><th style={{ ...th, textAlign:"right" }}>Total</th>
           <th style={th}>Ship</th><th style={th}>Arrival</th>
@@ -232,9 +232,9 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
       )}
 
       {sv==="production" && (
-        <div style={{ overflowX:"auto" }}><table style={tbl}><thead>
-          <tr><th style={th} rowSpan={2}>Week Of</th><th style={{ ...th, textAlign:"center", borderBottom:"2px solid #16a34a", color:T.GR }} colSpan={3}>Base (Jar/HDPE)</th><th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC }} colSpan={3}>Lid (Cap/PP)</th><th style={{ ...th, textAlign:"center" }} colSpan={2}>Combined</th></tr>
-          <tr><th style={{ ...th, textAlign:"right" }}>Weekly</th><th style={{ ...th, textAlign:"right" }}>Cumul</th><th style={{ ...th, textAlign:"right" }}>Surplus</th><th style={{ ...th, textAlign:"right" }}>Weekly</th><th style={{ ...th, textAlign:"right" }}>Cumul</th><th style={{ ...th, textAlign:"right" }}>Surplus</th><th style={{ ...th, textAlign:"right" }}>Total</th><th style={{ ...th, textAlign:"right" }}>Shippable</th></tr>
+        <div style={{ overflowX:"auto", maxHeight:"calc(100vh - 240px)", overflowY:"auto" }}><table style={tbl}><thead>
+          <tr><th style={{ ...th, top:0, zIndex:3 }} rowSpan={2}>Week Of</th><th style={{ ...th, textAlign:"center", borderBottom:"2px solid #16a34a", color:T.GR, top:0, zIndex:3 }} colSpan={3}>Base (Jar/HDPE)</th><th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC, top:0, zIndex:3 }} colSpan={3}>Lid (Cap/PP)</th><th style={{ ...th, textAlign:"center", top:0, zIndex:3 }} colSpan={2}>Combined</th></tr>
+          <tr><th style={{ ...th, textAlign:"right", top:28, zIndex:2 }}>Weekly</th><th style={{ ...th, textAlign:"right", top:28, zIndex:2 }}>Cumul</th><th style={{ ...th, textAlign:"right", top:28, zIndex:2 }}>Surplus</th><th style={{ ...th, textAlign:"right", top:28, zIndex:2 }}>Weekly</th><th style={{ ...th, textAlign:"right", top:28, zIndex:2 }}>Cumul</th><th style={{ ...th, textAlign:"right", top:28, zIndex:2 }}>Surplus</th><th style={{ ...th, textAlign:"right", top:28, zIndex:2 }}>Total</th><th style={{ ...th, textAlign:"right", top:28, zIndex:2 }}>Shippable</th></tr>
         </thead><tbody>
           {prod.filter(function(w) { return w.bW>0||w.lW>0||w.bC>0; }).map(function(w,i) {
             var isHl3 = hl === "p"+i;
