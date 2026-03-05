@@ -10,7 +10,7 @@ export default function SettingsTab({ sc, cap, upd }) {
     { k: "molds", l: "Mold Specs" }, { k: "ptl", l: "Proto Timeline" },
     { k: "mtl", l: "Prod Timeline" }, { k: "fc", l: "Forecast" },
     { k: "pkl", l: "Packing List" }, { k: "ship", l: "Shipping" },
-    { k: "capex", l: "Capital Expenses" }, { k: "par", l: "Parameters" },
+    { k: "par", l: "Parameters" },
   ];
 
   function MoldPanel({ label, type, color, icon }) {
@@ -94,27 +94,6 @@ export default function SettingsTab({ sc, cap, upd }) {
     </div>
   );
 
-  const CXSet = () => (
-    <div style={{ maxWidth: 600 }}>
-      <Sec title="Production Molds" color={T.GR} bg="#dcfce7"><table style={{ ...tbl, marginBottom: 0 }}><thead><tr><th style={th}>Item</th><th style={{ ...th, textAlign: "center" }}>Qty</th><th style={{ ...th, textAlign: "right" }}>Each</th><th style={{ ...th, textAlign: "right" }}>Total</th></tr></thead><tbody>
-        {[{ n: "Base Proto Jar", q: sc.molds.base.proto.qty, c: sc.molds.base.proto.cost },{ n: "Base Prod Jar", q: sc.molds.base.prod.qty, c: sc.molds.base.prod.cost },{ n: "Lid Proto", q: sc.molds.lid.proto.qty, c: sc.molds.lid.proto.cost },{ n: "Lid Prod", q: sc.molds.lid.prod.qty, c: sc.molds.lid.prod.cost }].map((r, i) => <tr key={i}><td style={td}>{r.n}</td><td style={{ ...td, textAlign: "center", color: T.AC, fontWeight: 700 }}>{r.q}</td><td style={{ ...td, textAlign: "right" }}>{fC(r.c)}</td><td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{fC(r.q * r.c)}</td></tr>)}
-        <tr style={{ background: "#dcfce710" }}><td colSpan={3} style={{ ...td, fontWeight: 700, borderTop: "2px solid " + T.GR }}>Subtotal</td><td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR }}>{fC(cap.mT)}</td></tr>
-      </tbody></table></Sec>
-      <Sec title="Prototype Molds" color={T.PU} bg="#f3e8ff"><table style={{ ...tbl, marginBottom: 0 }}><thead><tr><th style={th}>Item</th><th style={{ ...th, textAlign: "center" }}>Qty</th><th style={{ ...th, textAlign: "right" }}>Each</th><th style={{ ...th, textAlign: "right" }}>Total</th></tr></thead><tbody>
-        {sc.protoMolds.map((p, i) => <tr key={i}><td style={td}>{p.name}</td><td style={{ ...td, textAlign: "center" }}><QC value={p.qty} onChange={v => upd(s => { s.protoMolds[i].qty = v; })} /></td><td style={{ ...td, textAlign: "right" }}><Ed value={p.cost} onChange={v => upd(s => { s.protoMolds[i].cost = v; })} /></td><td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{fC(p.qty * p.cost)}</td></tr>)}
-        <tr style={{ background: "#f3e8ff10" }}><td colSpan={3} style={{ ...td, fontWeight: 700, borderTop: "2px solid " + T.PU }}>Subtotal</td><td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.PU, borderTop: "2px solid " + T.PU }}>{fC(cap.pT)}</td></tr>
-      </tbody></table></Sec>
-      <Sec title="Equipment Change Parts" color={T.AM} bg="#fef3c7"><table style={{ ...tbl, marginBottom: 0 }}><thead><tr><th style={th}>Item</th><th style={{ ...th, textAlign: "center" }}>Qty</th><th style={{ ...th, textAlign: "right" }}>Each</th><th style={{ ...th, textAlign: "right" }}>Total</th></tr></thead><tbody>
-        {sc.equipment.map((e, i) => <tr key={i}><td style={td}>{e.name}</td><td style={{ ...td, textAlign: "center" }}><QC value={e.qty} onChange={v => upd(s => { s.equipment[i].qty = v; })} /></td><td style={{ ...td, textAlign: "right" }}><Ed value={e.cost} onChange={v => upd(s => { s.equipment[i].cost = v; })} /></td><td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{fC(e.qty * e.cost)}</td></tr>)}
-        <tr style={{ background: "#fef3c710" }}><td colSpan={3} style={{ ...td, fontWeight: 700, borderTop: "2px solid " + T.AM }}>Subtotal</td><td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AM, borderTop: "2px solid " + T.AM }}>{fC(cap.eT)}</td></tr>
-      </tbody></table></Sec>
-      <div style={{ marginTop: 14, background: "linear-gradient(135deg," + T.S1 + "," + T.S2 + ")", borderRadius: 7, padding: "12px 16px", border: "1px solid " + T.AC, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: 11, color: T.T2, textTransform: "uppercase", letterSpacing: 1, fontWeight: 600 }}>Total Capital Expense</div>
-        <div style={{ fontSize: 22, fontWeight: 800, color: T.AC, fontFamily: "'JetBrains Mono',monospace" }}>{f$(cap.grand)}</div>
-      </div>
-    </div>
-  );
-
   const ParSet = () => (
     <div style={{ maxWidth: 520 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Lead Times & Rounding</div>
@@ -171,7 +150,6 @@ export default function SettingsTab({ sc, cap, upd }) {
       {stab === "fc" && <FCTbl />}
       {stab === "pkl" && <PKTbl />}
       {stab === "ship" && <ShipSet />}
-      {stab === "capex" && <CXSet />}
       {stab === "par" && <ParSet />}
     </div>
   );
