@@ -141,12 +141,14 @@ export default function AiAssistant({ sc, gld, ships, prod, frt, cap }) {
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var text = "";
-      if (data.content) {
+      if (data.error) {
+        text = "API Error: " + (typeof data.error === "string" ? data.error : JSON.stringify(data.error));
+      } else if (data.content) {
         for (var j = 0; j < data.content.length; j++) {
           if (data.content[j].type === "text") text += data.content[j].text;
         }
       }
-      setMsgs(function(prev) { return prev.concat([{ role: "assistant", content: text || "Sorry, I couldn't process that request." }]); });
+      setMsgs(function(prev) { return prev.concat([{ role: "assistant", content: text || "No response content received. Raw: " + JSON.stringify(data).substring(0, 200) }]); });
       setLoading(false);
     })
     .catch(function(err) {
