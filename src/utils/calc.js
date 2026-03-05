@@ -53,24 +53,19 @@ function sd(arriveBy, transitDays) {
 }
 
 function splitPallets(pallets, bPP, lPP, bAvail, lAvail, airCostB, airCostL) {
-  // Minimize Air cost: pick the pallet split that saves the most Air freight
-  // Half-pallet rule: allow last pallet if >= 50% full
   var fullBP = Math.floor(bAvail / bPP);
   var bRem = bAvail - fullBP * bPP;
   var maxBP = fullBP + (bRem >= bPP * 0.5 ? 1 : 0);
   var fullLP = Math.floor(lAvail / lPP);
   var lRem = lAvail - fullLP * lPP;
   var maxLP = fullLP + (lRem >= lPP * 0.5 ? 1 : 0);
-
   var acB = airCostB || 0.40;
   var acL = airCostL || 0.12;
-
   var bestB = 0, bestL = 0, bestBP = 0, bestLP = 0, bestSaving = -1;
   for (var bp = 0; bp <= Math.min(pallets, maxBP); bp++) {
     var lp = Math.min(pallets - bp, maxLP);
     var bQ = Math.min(bp * bPP, bAvail);
     var lQ = Math.min(lp * lPP, lAvail);
-    // Air cost saved by shipping these via Ocean/FB instead of Air
     var saving = bQ * acB + lQ * acL;
     if (saving > bestSaving) {
       bestB = bQ; bestL = lQ; bestBP = bp; bestLP = lp; bestSaving = saving;
@@ -78,8 +73,6 @@ function splitPallets(pallets, bPP, lPP, bAvail, lAvail, airCostB, airCostL) {
   }
   return { bQ: bestB, lQ: bestL, bPallets: bestBP, lPallets: bestLP };
 }
-
-// Minimum pallets required per container (configurable via settings)
 
 export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   const gld = calcGLD(mkts), prod = calcProd(molds), res = [];
@@ -101,41 +94,32 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     demands.push({ mo: m, dem: gld[m], bDeadline: bD, lDeadline: lD, bNeed: gld[m], lNeed: gld[m] });
   }
 
-  // Helper: ship Ocean containers (full only) — ships ASAP when production ready
   function shipOcean(d, oSD, label) {
-    // Find the EARLIEST week where enough production exists for a container
-    // Scan from earliest production week up to oSD (latest allowed ship date)
     for (const ck of ["40HC", "20HC"]) {
       const cc = { pallets: cont[ck].pallets, bPP: pal.basePP, lPP: pal.lidPP };
       const mnP = cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16);
-
-      // Try each production week as a potential ship date
       for (var pwi = 0; pwi < prod.length; pwi++) {
-        if (prod[pwi].wk > oSD) break; // Don't ship later than deadline allows
+        if (prod[pwi].wk > oSD) break;
         if (d.bNeed <= 0 && d.lNeed <= 0) break;
-
         var shipWk = prod[pwi].wk;
         var avail = prodAt(prod, shipWk);
         var aB = Math.max(0, avail.bC - bS);
         var aL = Math.max(0, avail.lC - lS);
         var cB = Math.min(aB, d.bNeed);
         var cL = Math.min(aL, d.lNeed);
-
         while (cB + cL > 0) {
           var sp = splitPallets(cc.pallets, cc.bPP, cc.lPP, cB, cL, airCost.base, airCost.lid);
           if (sp.bQ + sp.lQ <= 0) break;
           var usedPal = (sp.bQ > 0 ? sp.bPallets : 0) + (sp.lQ > 0 ? sp.lPallets : 0);
           if (usedPal < mnP) break;
-
+          // FIXED: arrival = shipWk + transitDays (was incorrectly set then overwritten)
           var arrDate = new Date(shipWk);
           arrDate.setDate(arrDate.getDate() + oc.transitDays);
-
           res.push({ mo: d.mo, meth: "Standard Ocean", cn: cont[ck].label, bQ: sp.bQ, lQ: sp.lQ, tQ: sp.bQ + sp.lQ, cost: 0,
             bSd: new Date(shipWk), lSd: new Date(shipWk), bAr: new Date(arrDate), lAr: new Date(arrDate),
             preShip: !!label, bPal: sp.bPallets, lPal: sp.lPallets });
           bS += sp.bQ; lS += sp.lQ; d.bNeed -= sp.bQ; d.lNeed -= sp.lQ;
           cB -= sp.bQ; cL -= sp.lQ;
-          // Recheck available after shipping
           aB = Math.max(0, avail.bC - bS);
           aL = Math.max(0, avail.lC - lS);
           cB = Math.min(aB, d.bNeed);
@@ -145,7 +129,6 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     }
   }
 
-  // Helper: ship Fast Boat
   function shipFB(d) {
     if (!fb) return;
     if (d.bNeed <= 0 && d.lNeed <= 0) return;
@@ -156,28 +139,26 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     let canB = Math.min(Math.max(0, bAv.bC - bS), d.bNeed);
     let canL = Math.min(Math.max(0, lAv.lC - lS), d.lNeed);
     const combAvailL = Math.min(Math.max(0, bAv.lC - lS), d.lNeed);
-
-    // Decide: separate or combined
     const sepAirCost = Math.max(0, d.bNeed - canB) * airCost.base + Math.max(0, d.lNeed - canL) * airCost.lid;
     const combAirCost = Math.max(0, d.bNeed - canB) * airCost.base + Math.max(0, d.lNeed - combAvailL) * airCost.lid;
     const useSep = canL > combAvailL && sepAirCost < combAirCost;
 
     if (useSep) {
-      // Bases
       let remB = canB;
       for (const ck of ["40HC", "20HC"]) {
         const cc = { pallets: cont[ck].pallets, bPP: pal.basePP };
         while (remB > 0) {
           const bPl = Math.min(cc.pallets, Math.floor(remB / cc.bPP) + (remB % cc.bPP >= cc.bPP * 0.5 ? 1 : 0));
           if (bPl < (cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16))) break;
-          const bQ = Math.min(bPl * cc.bPP, remB);  // capped to available
+          const bQ = Math.min(bPl * cc.bPP, remB);
           if (bQ <= 0) break;
+          // FIXED: arrival = bSD + transitDays
+          const bArr = new Date(bSD); bArr.setDate(bArr.getDate() + fb.transitDays);
           res.push({ mo: d.mo, meth: "Fast Boat", cn: cont[ck].label, bQ, lQ: 0, tQ: bQ, cost: cont[ck].cost,
-            bSd: new Date(bSD), lSd: new Date(bSD), bAr: new Date(d.bDeadline), lAr: new Date(d.bDeadline), bPal: bPl, lPal: 0 });
+            bSd: new Date(bSD), lSd: new Date(bSD), bAr: bArr, lAr: bArr, bPal: bPl, lPal: 0 });
           bS += bQ; d.bNeed -= bQ; remB -= bQ;
         }
       }
-      // Lids
       let remL = canL;
       for (const ck of ["40HC", "20HC"]) {
         const cc = { pallets: cont[ck].pallets, lPP: pal.lidPP };
@@ -186,13 +167,14 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
           if (lPl < (cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16))) break;
           const lQ = Math.min(lPl * cc.lPP, remL);
           if (lQ <= 0) break;
+          // FIXED: arrival = lSD + transitDays
+          const lArr = new Date(lSD); lArr.setDate(lArr.getDate() + fb.transitDays);
           res.push({ mo: d.mo, meth: "Fast Boat", cn: cont[ck].label, bQ: 0, lQ, tQ: lQ, cost: cont[ck].cost,
-            bSd: new Date(lSD), lSd: new Date(lSD), bAr: new Date(d.lDeadline), lAr: new Date(d.lDeadline), bPal: 0, lPal: lPl });
+            bSd: new Date(lSD), lSd: new Date(lSD), bAr: lArr, lAr: lArr, bPal: 0, lPal: lPl });
           lS += lQ; d.lNeed -= lQ; remL -= lQ;
         }
       }
     } else {
-      // Combined on base ship date
       let remB = canB, remL = combAvailL;
       for (const ck of ["40HC", "20HC"]) {
         const cc = { pallets: cont[ck].pallets, bPP: pal.basePP, lPP: pal.lidPP };
@@ -201,35 +183,29 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
           if (sp.bQ + sp.lQ <= 0) break;
           var usedP = (sp.bQ > 0 ? sp.bPallets : 0) + (sp.lQ > 0 ? sp.lPallets : 0);
           if (usedP < (cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16))) break;
+          // FIXED: combined ships on bSD, both components arrive bSD + transitDays
+          const arrDate = new Date(bSD); arrDate.setDate(arrDate.getDate() + fb.transitDays);
           res.push({ mo: d.mo, meth: "Fast Boat", cn: cont[ck].label, bQ: sp.bQ, lQ: sp.lQ, tQ: sp.bQ + sp.lQ, cost: cont[ck].cost,
-            bSd: new Date(bSD), lSd: new Date(bSD), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline), bPal: sp.bPallets, lPal: sp.lPallets });
+            bSd: new Date(bSD), lSd: new Date(bSD), bAr: new Date(arrDate), lAr: new Date(arrDate),
+            bPal: sp.bPallets, lPal: sp.lPallets });
           bS += sp.bQ; lS += sp.lQ; d.bNeed -= sp.bQ; d.lNeed -= sp.lQ;
           remB -= sp.bQ; remL -= sp.lQ;
         }
       }
     }
+  }
 
-      }
-
-    // ═══════════════════════════════════════════════════════
-  // PHASE 1: For each month, Ocean first, then Fast Boat
-  // This ensures FB gets production before pre-ship steals it
-  // ═══════════════════════════════════════════════════════
+  // PHASE 1: Each month — Ocean first, then Fast Boat
   for (const d of demands) {
-    // Ocean for this month's own demand
     if (oc) {
       const oSD = sd(d.bDeadline, oc.transitDays);
       shipOcean(d, oSD, null);
     }
-    // Fast Boat for remainder
     shipFB(d);
   }
 
-  // ═══════════════════════════════════════════════════════
-  // PHASE 2: Pre-ship future demand on free Ocean
-  // Now that FB has been allocated, use remaining excess
-  // production to pre-fill Ocean containers for later months
-  // ═══════════════════════════════════════════════════════
+  // PHASE 2: Pre-ship future demand on free Ocean using earlier ship windows
+  // FIXED: Only pre-ship when goods will arrive on time for the future month's deadline
   if (oc) {
     for (let di = 0; di < demands.length; di++) {
       const d = demands[di];
@@ -237,45 +213,48 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
       for (let fj = di + 1; fj < demands.length; fj++) {
         const fd = demands[fj];
         if (fd.bNeed <= 0 && fd.lNeed <= 0) continue;
-        shipOcean(fd, oSD, "pre");
+        // FIXED: verify pre-shipped goods arrive before future month's deadline
+        const preArrival = new Date(oSD);
+        preArrival.setDate(preArrival.getDate() + oc.transitDays);
+        if (preArrival <= fd.bDeadline) {
+          shipOcean(fd, oSD, "pre");
+        }
       }
     }
   }
 
-  // ═══════════════════════════════════════════════════════
   // PHASE 3: Second pass Fast Boat for anything freed up
-  // ═══════════════════════════════════════════════════════
   if (fb) {
     for (const d of demands) { shipFB(d); }
   }
 
-  // ═══════════════════════════════════════════════════════
-  // PHASE 4: Air for anything remaining (split pricing, air pallet rounding)
-  // ═══════════════════════════════════════════════════════
+  // PHASE 4: Air for anything remaining
+  // FIXED: deduct actual need (not rounded pallet qty) to prevent overshooting bS/lS
+  // FIXED: removed erroneous post-loop arrival date overwrite
   if (ar) {
     const abPP = pal.airBasePP || 7500;
     const alPP = pal.airLidPP || 25000;
     for (const d of demands) {
       if (d.bNeed <= 0 && d.lNeed <= 0) continue;
-      const aSD = sd(d.bDeadline, ar.transitDays);
+      const bSD = sd(d.bDeadline, ar.transitDays);
       const bQ = d.bNeed > 0 ? Math.ceil(d.bNeed / abPP) * abPP : 0;
       const lQ = d.lNeed > 0 ? Math.ceil(d.lNeed / alPP) * alPP : 0;
       if (bQ + lQ > 0) {
         const bPal = bQ > 0 ? Math.ceil(bQ / abPP) : 0;
         const lPal = lQ > 0 ? Math.ceil(lQ / alPP) : 0;
-        res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ, lQ, tQ: bQ + lQ, cost: bQ * airCost.base + lQ * airCost.lid,
-          bSd: new Date(aSD), lSd: new Date(aSD), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline),
+        const bArr = new Date(bSD); bArr.setDate(bArr.getDate() + ar.transitDays);
+        res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ, lQ, tQ: bQ + lQ,
+          cost: bQ * airCost.base + lQ * airCost.lid,
+          bSd: new Date(bSD), lSd: new Date(bSD), bAr: bArr, lAr: bArr,
           bPal, lPal });
-        bS += bQ; lS += lQ; d.bNeed -= bQ; d.lNeed -= lQ;
+        // FIXED: deduct actual need, not rounded up pallet quantity
+        bS += Math.min(bQ, d.bNeed); lS += Math.min(lQ, d.lNeed);
+        d.bNeed = 0; d.lNeed = 0;
       }
     }
   }
 
-  // Fix arrival dates
-  for (const sh of res) {
-    const m = ship.find(s => s.method === sh.meth);
-    if (m) { const arr = new Date(sh.bSd); arr.setDate(arr.getDate() + m.transitDays); sh.bAr = new Date(arr); sh.lAr = new Date(arr); }
-  }
+  // REMOVED: erroneous post-loop that overwrote all lAr with bAr values
 
   const mo = { "Standard Ocean": 0, "Fast Boat": 1, "Air": 2 };
   res.sort((a, b) => a.mo - b.mo || mo[a.meth] - mo[b.meth]);
@@ -283,57 +262,43 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
 }
 
 export function calcWeeklyDemand(mkts) {
-  // Build weekly demand timeline from SKU detail data + monthly fallback
-  // Returns array of {date, demand} for each week from Mar 9 to Dec 28
   var S = new Date("2026-03-09");
   var weeks = [];
   for (var w = 0; w < 43; w++) {
     var wk = new Date(S); wk.setDate(wk.getDate() + w * 7);
     weeks.push({ wk: wk, demand: 0 });
   }
-
   for (var mi = 0; mi < mkts.length; mi++) {
     var mk = mkts[mi];
     if (mk.goLive == null) continue;
-
     if (mk.skuDetail && mk.skuDetail.weeks && mk.skuDetail.skus) {
-      // Use weekly SKU data
       var det = mk.skuDetail;
       for (var si = 0; si < det.skus.length; si++) {
         var sku = det.skus[si];
         for (var wi = 0; wi < sku.weekly.length && wi < det.weeks.length; wi++) {
           if (sku.weekly[wi] <= 0) continue;
           var skuDate = new Date(det.weeks[wi]);
-          // Find the matching production week
           for (var pwi = 0; pwi < weeks.length; pwi++) {
             var diff = Math.abs(weeks[pwi].wk.getTime() - skuDate.getTime());
-            if (diff < 4 * 86400000) { // within 4 days
-              weeks[pwi].demand += sku.weekly[wi];
-              break;
-            }
+            if (diff < 4 * 86400000) { weeks[pwi].demand += sku.weekly[wi]; break; }
           }
         }
       }
     } else {
-      // Monthly fallback: spread evenly across weeks in each month
       for (var mo = 0; mo < 12; mo++) {
         if (mo + 1 < mk.goLive) continue;
         var mDem = mk.demand[mo] || 0;
         if (mDem <= 0) continue;
-        // Find weeks in this month
         var mWeeks = [];
         for (var pwi2 = 0; pwi2 < weeks.length; pwi2++) {
           if (weeks[pwi2].wk.getMonth() === mo) mWeeks.push(pwi2);
         }
         if (mWeeks.length > 0) {
           var perWk = mDem / mWeeks.length;
-          for (var mwi = 0; mwi < mWeeks.length; mwi++) {
-            weeks[mWeeks[mwi]].demand += perWk;
-          }
+          for (var mwi = 0; mwi < mWeeks.length; mwi++) { weeks[mWeeks[mwi]].demand += perWk; }
         }
       }
     }
   }
-
   return weeks;
 }
