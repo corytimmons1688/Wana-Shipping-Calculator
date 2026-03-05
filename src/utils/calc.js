@@ -53,14 +53,20 @@ function sd(arriveBy, transitDays) {
 }
 
 function splitPallets(pallets, bPP, lPP, bWant, lWant) {
+  // Always ship full pallets - round up to fill each allocated pallet
   let bestB = 0, bestL = 0, bestBP = 0, bestLP = 0, bestWaste = Infinity;
   for (let bp = 0; bp <= pallets; bp++) {
     const lp = pallets - bp;
-    const bQ = Math.min(bp * bPP, bWant);
-    const lQ = Math.min(lp * lPP, lWant);
-    const waste = (bp * bPP - bQ) + (lp * lPP - lQ);
+    // Only allocate pallets we actually need (ceil of demand / per-pallet)
+    const bPalUsed = Math.min(bp, bWant > 0 ? Math.ceil(bWant / bPP) : 0);
+    const lPalUsed = Math.min(lp, lWant > 0 ? Math.ceil(lWant / lPP) : 0);
+    // Full pallets: each pallet is fully loaded
+    const bQ = bPalUsed * bPP;
+    const lQ = lPalUsed * lPP;
+    const totalPal = bPalUsed + lPalUsed;
+    const waste = (bQ - bWant) + (lQ - lWant);
     if (bQ + lQ > bestB + bestL || (bQ + lQ === bestB + bestL && waste < bestWaste)) {
-      bestB = bQ; bestL = lQ; bestBP = bp; bestLP = lp; bestWaste = waste;
+      bestB = bQ; bestL = lQ; bestBP = bPalUsed; bestLP = lPalUsed; bestWaste = waste;
     }
   }
   return { bQ: bestB, lQ: bestL, bPallets: bestBP, lPallets: bestLP };
@@ -139,7 +145,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
         while (remB > 0) {
           const bPl = Math.min(cc.pallets, Math.ceil(remB / cc.bPP));
           if (bPl < (cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16))) break;
-          const bQ = Math.min(bPl * cc.bPP, remB);
+          const bQ = bPl * cc.bPP;
           if (bQ <= 0) break;
           res.push({ mo: d.mo, meth: "Fast Boat", cn: cont[ck].label, bQ, lQ: 0, tQ: bQ, cost: cont[ck].cost,
             bSd: new Date(bSD), lSd: new Date(bSD), bAr: new Date(d.bDeadline), lAr: new Date(d.bDeadline), bPal: bPl, lPal: 0 });
@@ -153,7 +159,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
         while (remL > 0) {
           const lPl = Math.min(cc.pallets, Math.ceil(remL / cc.lPP));
           if (lPl < (cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16))) break;
-          const lQ = Math.min(lPl * cc.lPP, remL);
+          const lQ = lPl * cc.lPP;
           if (lQ <= 0) break;
           res.push({ mo: d.mo, meth: "Fast Boat", cn: cont[ck].label, bQ: 0, lQ, tQ: lQ, cost: cont[ck].cost,
             bSd: new Date(lSD), lSd: new Date(lSD), bAr: new Date(d.lDeadline), lAr: new Date(d.lDeadline), bPal: 0, lPal: lPl });
