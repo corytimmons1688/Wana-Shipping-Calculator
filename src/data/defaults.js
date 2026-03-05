@@ -42,7 +42,7 @@ export const MOLDS = {
 
 export const CONTAINERS = {"20HC":{label:"20' HC",cost:9500,pallets:10,minPal:8},"40HC":{label:"40' HC",cost:14300,pallets:20,minPal:16}};
 export const PALLET = {basePP:9072,lidPP:30720,airBasePP:7500,airLidPP:25000};
-export const AIR_COST = {base:1.00,lid:0.25};
+export const AIR_COST = {base:0.40,lid:0.12};
 export const PARAMS = {baseLeadDays:10,lidLeadDays:7};
 export const PROTO_MOLDS = [{name:"Lid Mold VN",cost:1300,qty:1},{name:"EBM Jar VN",cost:1850,qty:1},{name:"Lid Mold CN",cost:2000,qty:1},{name:"EBM Jar CN",cost:1000,qty:1},{name:"IBM Jar CN",cost:2000,qty:1}];
 export const EQUIPMENT = [{name:"PE Label Applicator Change Parts",cost:29389,qty:1},{name:"KapsAll Change Parts",cost:17132,qty:1},{name:"Die Tool for Lid Liner",cost:450,qty:1}];
