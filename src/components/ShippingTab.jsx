@@ -4,7 +4,7 @@ import { fm, f$, fC, dF } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 import { Bg } from "./Shared";
 
-export default function ShippingTab({ ships, prod, frt, gld }) {
+export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
   var svState = useState("unified");
   var sv = svState[0], setSv = svState[1];
   var hlState = useState(null);
@@ -57,13 +57,25 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
       for (var ai = 0; ai < arrivals.length; ai++) { arrB += arrivals[ai].bQ; arrL += arrivals[ai].lQ; }
       cumArrB += arrB; cumArrL += arrL;
 
-      var wkMonth = w.wk.getMonth();
-      var monthDemand = 0;
-      if (wkMonth > lastDemMonth && gld[wkMonth] > 0) {
-        monthDemand = gld[wkMonth];
-        cumDemand += monthDemand;
-        lastDemMonth = wkMonth;
+      // Use weekly demand data if available, otherwise fall back to monthly
+      var weekDemand = 0;
+      if (weeklyDem) {
+        for (var wdi = 0; wdi < weeklyDem.length; wdi++) {
+          var diff = Math.abs(weeklyDem[wdi].wk.getTime() - w.wk.getTime());
+          if (diff < 2 * 86400000 && weeklyDem[wdi].demand > 0) {
+            weekDemand = Math.round(weeklyDem[wdi].demand);
+            break;
+          }
+        }
+      } else {
+        var wkMonth = w.wk.getMonth();
+        if (wkMonth > lastDemMonth && gld[wkMonth] > 0) {
+          weekDemand = gld[wkMonth];
+          lastDemMonth = wkMonth;
+        }
       }
+      cumDemand += weekDemand;
+      var monthDemand = weekDemand;
 
       var cumArrived = cumArrB + cumArrL;
       var stockOnHand = cumArrived - cumDemand;
@@ -91,7 +103,7 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
       });
     }
     return rows;
-  }, [prod, ships, gld]);
+  }, [prod, ships, gld, weeklyDem]);
 
   var hlBg = "#dbeafe";
 
@@ -130,7 +142,7 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
                 <th style={{ ...th, top:0, zIndex:3 }} rowSpan={2}>Week Of</th>
                 <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.GR, color:T.GR, top:0, zIndex:3 }} colSpan={4}>Production</th>
                 <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC, top:0, zIndex:3 }} colSpan={5}>Shipping</th>
-                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AM, color:T.AM, top:0, zIndex:3 }} colSpan={6}>Inventory at Calyx</th>
+                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AM, color:T.AM, top:0, zIndex:3 }} colSpan={7}>Inventory at Calyx</th>
               </tr>
               <tr>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Wk</th>
@@ -144,7 +156,8 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
                 <th style={{ ...th, textAlign:"left", fontSize:9, top:28, zIndex:2 }}>Arrival</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Arr</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Arr</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Demand</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Wk Demand</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Cum Demand</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Stk</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Stk</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Mo. Stock</th>
@@ -173,7 +186,8 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
                     <td style={{ ...td, color:T.T2, fontSize:11 }}>{firstShip ? dF(firstShip.bAr) : ""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.GR }}>{r.cumArrB>0?fm(r.cumArrB):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.AC }}>{r.cumArrL>0?fm(r.cumArrL):""}</td>
-                    <td style={{ ...td, textAlign:"right", color:r.monthDemand>0?"#9333ea":T.T2 }}>{r.cumDemand>0?fm(r.cumDemand):""}</td>
+                    <td style={{ ...td, textAlign:"right", color:r.monthDemand>0?"#9333ea":T.T2 }}>{r.monthDemand>0?fm(r.monthDemand):""}</td>
+                    <td style={{ ...td, textAlign:"right", color:T.T2, fontSize:11 }}>{r.cumDemand>0?fm(r.cumDemand):""}</td>
                     <td style={{ ...td, textAlign:"right", fontWeight:600, color:r.stockB<0?"#dc2626":r.stockB>0?T.GR:T.T2 }}>{r.cumArrB>0||r.cumDemand>0?fm(r.stockB):""}</td>
                     <td style={{ ...td, textAlign:"right", fontWeight:600, color:r.stockL<0?"#dc2626":r.stockL>0?T.AC:T.T2 }}>{r.cumArrL>0||r.cumDemand>0?fm(r.stockL):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.monthsOfStock<3&&r.cumDemand>0?"#dc2626":r.monthsOfStock>=3?T.GR:T.T2, fontSize:11 }}>{r.cumDemand>0?r.monthsOfStock.toFixed(1):""}</td>
@@ -190,7 +204,7 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
                       <td style={{ ...td, textAlign:"right", fontWeight:600, color:T.AC }}>{esh.lQ > 0 ? fm(esh.lQ) : ""}</td>
                       <td style={{ ...td, textAlign:"right", color:esh.cost>0?T.AM:T.GR, fontWeight:600 }}>{esh.cost===0?"FREE":f$(esh.cost)}</td>
                       <td style={{ ...td, color:T.T2, fontSize:11 }}>{dF(esh.bAr)}</td>
-                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
+                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
                     </tr>
                   );
                 });
