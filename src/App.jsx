@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { initScenario, mkScenario } from "./data/defaults";
-import { calcGLD, calcProd, calcCap, optimize } from "./utils/calc";
+import { calcGLD, calcProd, calcCap, optimize, calcWeeklyDemand } from "./utils/calc";
 import { fm, f$, fC, dc } from "./utils/format";
 import { T, tbl, th, td } from "./utils/theme";
 import DemandTab from "./components/DemandTab";
@@ -17,6 +17,7 @@ export default function App() {
   const upd = useCallback(fn => { setScenarios(p => { const nx = dc(p); fn(nx[active]); return nx; }); }, [active]);
   const gld = useMemo(() => calcGLD(sc.markets), [sc.markets]);
   const annD = useMemo(() => gld.reduce((a, b) => a + b, 0), [gld]);
+  const weeklyDem = useMemo(() => calcWeeklyDemand(sc.markets), [sc.markets]);
   const prod = useMemo(() => calcProd(sc.molds), [sc.molds]);
   const ships = useMemo(() => optimize(sc.markets, sc.molds, sc.shipping, sc.params, sc.containers, sc.pallet, sc.airCost), [sc.markets, sc.molds, sc.shipping, sc.params, sc.containers, sc.pallet, sc.airCost]);
   const cap = useMemo(() => calcCap(sc.molds, sc.protoMolds, sc.equipment), [sc.molds, sc.protoMolds, sc.equipment]);
@@ -69,7 +70,7 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"shipping", l:
           {mainTabs.map(t => { const a = tab === t.k; return <button key={t.k} onClick={() => setTab(t.k)} style={{ padding:"9px 16px", cursor:"pointer", border:"none", borderBottom:a ? "2px solid "+T.AC : "2px solid transparent", background:"transparent", color:a ? T.AC : T.T2, fontWeight:a ? 700 : 500, fontSize:12, display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", fontFamily:"inherit" }}><span>{t.i}</span>{t.l}</button>; })}
         </div>
         {tab === "demand" && <DemandTab sc={sc} gld={gld} annD={annD} upd={upd} />}
-        {tab === "shipping" && <ShippingTab ships={ships} prod={prod} frt={frt} gld={gld} />}
+        {tab === "shipping" && <ShippingTab ships={ships} prod={prod} frt={frt} gld={gld} weeklyDem={weeklyDem} />}
         {tab === "settings" && <SettingsTab sc={sc} cap={cap} upd={upd} />}
       </>)}
       <AiAssistant sc={sc} gld={gld} ships={ships} prod={prod} frt={frt} cap={cap} />
