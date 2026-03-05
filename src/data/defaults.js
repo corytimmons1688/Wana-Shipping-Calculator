@@ -8,7 +8,8 @@ export const MARKETS = [
   {name:"Arkansas",goLive:12,priority:false,demand:[13643,11866,15159,14670,12633,12225,14148,14148,13608,14582,14616,13541]},
   {name:"Canada",goLive:null,priority:false,demand:[0,0,0,0,0,0,0,0,0,0,0,0]},
   {name:"Connecticut",goLive:12,priority:false,demand:[11052,11270,14105,12420,12834,13110,13547,13547,13110,13547,13110,13547]},
-  {name:"Florida",goLive:12,priority:false,demand:[27983,25346,27846,31954,26177,24372,23590,25179,20520,21204,26190,27063]},
+  {name:"Minnesota",goLive:null,priority:false,demand:[0,0,0,0,0,0,0,0,0,0,0,0]},
+  {name:"Pennsylvania",goLive:null,priority:false,demand:[0,0,0,0,0,0,0,0,0,0,0,0]},
   {name:"Illinois",goLive:8,priority:true,demand:[75082,69269,101060,110880,84348,76315,112499,98208,99000,92070,86130,89001]},
   // FIXED: Maryland, Michigan, Missouri corrected to goLive:null (were incorrectly set to 12,
   // inflating December go-live demand by ~130K units vs Excel source)
