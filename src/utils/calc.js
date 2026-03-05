@@ -21,7 +21,6 @@ export function calcProd(molds) {
       const c = molds.base.proto.life ? Math.min(o, molds.base.proto.life - bPU) : o;
       bW += c; bPU += c;
     }
-    // Second prototype base mold (optional)
     if (bP2 && bP2D && wk >= bP2D && (bP2.life == null || bP2U < bP2.life)) {
       const o2 = bP2.daily * bP2.qty * bP2.days;
       const c2 = bP2.life ? Math.min(o2, bP2.life - bP2U) : o2;
@@ -60,7 +59,6 @@ function addDays(date, n) {
   const d = new Date(date); d.setDate(d.getDate() + n); return d;
 }
 
-// Try to pack one container. Prioritizes lids (bottleneck), fills remaining with bases.
 function packOne(bAvail, lAvail, maxPal, minPal, bPP, lPP) {
   for (let lp = Math.min(maxPal, Math.floor(lAvail / lPP)); lp >= 0; lp--) {
     const bp = Math.min(maxPal - lp, Math.floor(bAvail / bPP));
@@ -91,8 +89,6 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     });
   }
 
-  // committedBy(date): total units in shipments departing ON OR BEFORE date.
-  // This scopes availability accurately — future commitments don't reduce current surplus.
   function committedBy(date) {
     let bC = 0, lC = 0;
     for (const s of res) { if (s.bSd <= date) { bC += s.bQ; lC += s.lQ; } }
@@ -104,8 +100,6 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     return { bS: Math.max(0, p.bC - c.bC), lS: Math.max(0, p.lC - c.lC) };
   }
 
-  // Add containers at shipDate up to bMax/lMax. Returns {bShipped, lShipped}.
-  // stopWhenLidsDone: after lids satisfied, don't add base-only containers (Phase 2).
   function fillAt(method, d, shipDate, transitDays, bMax, lMax, preShip, stopWhenLidsDone, minPalOverride) {
     const a = availAt(shipDate);
     let remB = Math.min(a.bS, Math.max(0, bMax));
@@ -126,30 +120,18 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
           preShip: !!preShip, bPal: r.bPallets, lPal: r.lPallets });
         d.bNeed -= r.bQ; d.lNeed -= r.lQ;
         remB -= r.bQ; remL -= r.lQ;
-        // Refresh availability after each container (committedBy now includes this ship)
         const a2 = availAt(shipDate);
-        remB = Math.min(a2.bS, Math.max(0, bMax - (bMax - remB)));
-        remL = Math.min(a2.lS, Math.max(0, lMax - (lMax - remL)));
+        remB = Math.min(a2.bS, remB);
+        remL = Math.min(a2.lS, remL);
       }
     }
   }
 
   const minContPal = Math.min(...Object.values(cont).map(c => c.minPal || (c.pallets <= 10 ? 8 : 16)));
-  const padBases = minContPal * pal.basePP; // base padding to unlock lid containers
+  const padBases = minContPal * pal.basePP;
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // PHASE 1 — Ocean: two-pass approach using separate base/lid deadlines.
-  //
-  // Bases need 14 days lead, lids only 7 days. A single cutoff date loses
-  // ~168K lids/week that could ship on later Ocean containers.
-  //
-  // Pass 1a: base deadline — ship bases + any lids available at that date.
-  // Pass 1b: lid deadline — ship remaining lids using the later window.
-  //
-  // Both passes scan backward, leaving early production for earlier months.
-  // ════════════════════════════════════════════════════════════════════════════
+  // PHASE 1 — Ocean
   if (oc) {
-    // Pass 1a: base deadline window
     for (const d of demands) {
       const ocBD = addDays(d.bDeadline, -oc.transitDays);
       const validWeeks = prod.filter(pw => pw.wk <= ocBD);
@@ -157,12 +139,11 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
         fillAt("Standard Ocean", d, validWeeks[i].wk, oc.transitDays, d.bNeed, d.lNeed, false, false, null);
       }
     }
-    // Pass 1b: lid deadline window — extra weeks between base and lid deadlines
     for (const d of demands) {
       if (d.lNeed <= 0) continue;
       const ocLD = addDays(d.lDeadline, -oc.transitDays);
       const ocBD = addDays(d.bDeadline, -oc.transitDays);
-      if (ocLD <= ocBD) continue; // no extra window
+      if (ocLD <= ocBD) continue;
       const extraWeeks = prod.filter(pw => pw.wk > ocBD && pw.wk <= ocLD);
       for (let i = extraWeeks.length - 1; i >= 0 && d.lNeed > 0; i--) {
         fillAt("Standard Ocean", d, extraWeeks[i].wk, oc.transitDays, padBases, d.lNeed, false, true, null);
@@ -170,23 +151,13 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // PHASE 2 — Fast Boat lid shipments.
-  //
-  // For months where lid production was unavailable at Ocean deadline,
-  // ship lids via FB at the lid deadline. Allow base padding (up to padBases)
-  // so lid containers can meet minimum pallet requirements.
-  //
-  // Only ship if lids are included (don't ship base-only here).
-  // Refresh availAt after each container to accurately track surplus.
-  // ════════════════════════════════════════════════════════════════════════════
+  // PHASE 2 — Fast Boat lid shipments
   if (fb) {
     for (const d of demands) {
       if (d.lNeed <= 0) continue;
       const lSD = addDays(d.lDeadline, -fb.transitDays);
 
       if (d.lNeed >= pal.lidPP) {
-        // Has ≥1 lid pallet. Allow base padding to unlock containers.
         const bMaxFB = Math.max(d.bNeed, padBases);
         const a = availAt(lSD);
         let remB = Math.min(a.bS, bMaxFB);
@@ -197,7 +168,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
           const minPal = ck.minPal || (maxPal <= 10 ? 8 : 16);
           while (d.lNeed > 0 && remL > 0) {
             const r = packOne(remB, remL, maxPal, minPal, pal.basePP, pal.lidPP);
-            if (!r || r.lQ === 0) break; // only ship if lids are included
+            if (!r || r.lQ === 0) break;
             const arrDate = addDays(lSD, fb.transitDays);
             res.push({ mo: d.mo, meth: "Fast Boat", cn: ck.label,
               bQ: r.bQ, lQ: r.lQ, tQ: r.bQ + r.lQ, cost: ck.cost,
@@ -205,7 +176,6 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
               preShip: false, bPal: r.bPallets, lPal: r.lPallets });
             d.bNeed -= r.bQ; d.lNeed -= r.lQ;
             remB -= r.bQ; remL -= r.lQ;
-            // Refresh after each ship
             const a2 = availAt(lSD);
             remB = Math.min(a2.bS, Math.max(0, Math.max(d.bNeed, padBases)));
             remL = Math.min(a2.lS, Math.max(0, d.lNeed));
@@ -215,31 +185,44 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // PHASE 3 — Fast Boat base-only shipments (partial containers allowed).
-  //
-  // Only use FB when it's cheaper than Air for the given quantity.
-  // Min bases to justify: 20HC=$9500→23,750 bases; 40HC=$14,300→35,750 bases.
-  // Uses minPalOverride=1 so partial containers are allowed for residual base needs.
-  // ════════════════════════════════════════════════════════════════════════════
+  // PHASE 3 — Fast Boat base/lid residuals (sub-pallet leftovers)
+  // FIX: Use per-unit cost comparison instead of total cost vs container cost.
+  // FB 20HC at $9,500 breaks even at 11,875 units ($0.80/unit Air).
+  // FB 40HC at $14,300 breaks even at 17,875 units.
+  // Use minPalOverride=1 to allow partial containers.
+  // Also handle lid residuals here, not just bases.
   if (fb) {
     for (const d of demands) {
-      if (d.bNeed <= 0) continue;
       const bSD = addDays(d.bDeadline, -fb.transitDays);
       const lSD = addDays(d.lDeadline, -fb.transitDays);
-      const shipDate = bSD <= lSD ? bSD : lSD;
-      // Only use FB if cheaper than equivalent Air cost for the base quantity
-      const airEquiv = d.bNeed * airCost.base;
-      const cheapestContainer = Math.min(...Object.values(cont).map(c => c.cost));
-      if (airEquiv > cheapestContainer) {
-        fillAt("Fast Boat", d, shipDate, fb.transitDays, d.bNeed, 0, false, false, 1);
+
+      // Ship remaining bases via FB if it beats Air on a per-unit basis
+      if (d.bNeed > 0) {
+        const shipDate = bSD;
+        // Find cheapest FB container cost per unit for this quantity
+        let fbCheapest = Infinity;
+        for (const ck of Object.values(cont)) {
+          const unitsPerCont = ck.pallets * pal.basePP;
+          if (d.bNeed >= pal.basePP) { // at least 1 pallet
+            fbCheapest = Math.min(fbCheapest, ck.cost / Math.min(d.bNeed, unitsPerCont));
+          }
+        }
+        const airPerUnit = airCost.base;
+        if (fbCheapest < airPerUnit || d.bNeed >= pal.basePP) {
+          fillAt("Fast Boat", d, shipDate, fb.transitDays, d.bNeed, 0, false, false, 1);
+        }
+      }
+
+      // Ship remaining lids via FB if any left (lid residuals missed by Phase 2)
+      if (d.lNeed > 0 && d.lNeed >= pal.lidPP) {
+        const shipDate = lSD;
+        const bMaxFB = Math.max(d.bNeed, padBases);
+        fillAt("Fast Boat", d, shipDate, fb.transitDays, bMaxFB, d.lNeed, false, false, 1);
       }
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // PHASE 4 — Air: last resort for genuine sub-pallet production gaps.
-  // ════════════════════════════════════════════════════════════════════════════
+  // PHASE 4 — Air: last resort for genuine production gaps
   if (ar) {
     const abPP = pal.airBasePP || 7500, alPP = pal.airLidPP || 25000;
     for (const d of demands) {
@@ -258,42 +241,55 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   }
 
   const moOrder = { "Standard Ocean": 0, "Fast Boat": 1, "Air": 2 };
-  // Sort first so within each month: Ocean → FB → Air, ensuring non-Air counted before Air in post-pass
   res.sort((a, b) => a.mo - b.mo || moOrder[a.meth] - moOrder[b.meth] || a.bSd - b.bSd);
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // POST-PASS: Remove Air shipments made unnecessary by cumulative carry-over.
-  //
-  // Track base surplus and lid surplus INDEPENDENTLY. An Air shipment for
-  // bases is redundant if cumulative bases already cover cumulative demand.
-  // Same for lids. Mixed Air (both bQ>0 and lQ>0) is only dropped if BOTH
-  // components are covered.
-  // ════════════════════════════════════════════════════════════════════════════
+  // POST-PASS: Remove Air shipments made unnecessary by cumulative surplus.
+  // FIX: Track per-month shipped vs needed rather than cumulative totals.
+  // Cumulative comparison was masking genuine per-month shortfalls and
+  // failing to remove redundant Air when earlier months had small Air residuals.
   {
     const toRemove = new Set();
-    let cumB = 0, cumL = 0, cumD = 0;
-    const months = [...new Set(res.map(s => s.mo))].sort((a,b) => a-b);
+    // Build per-month non-Air totals first
+    const moShipped = {}; // mo -> { b, l }
+    for (const s of res) {
+      if (s.meth === "Air") continue;
+      if (!moShipped[s.mo]) moShipped[s.mo] = { b: 0, l: 0 };
+      moShipped[s.mo].b += s.bQ;
+      moShipped[s.mo].l += s.lQ;
+    }
+    // Accumulate carry-over: surplus from earlier months can cover later months
+    let carryB = 0, carryL = 0;
+    const months = [...new Set(res.map(s => s.mo))].sort((a, b) => a - b);
     for (const m of months) {
-      cumD += gld[m] || 0;
-      // Count non-Air first so carry-over is known before evaluating Air
-      for (const s of res) {
-        if (s.mo === m && s.meth !== "Air") { cumB += s.bQ; cumL += s.lQ; }
-      }
+      const shipped = moShipped[m] || { b: 0, l: 0 };
+      const dem = gld[m] || 0;
+      // Carry-over from previous months plus this month's non-Air shipments
+      carryB += shipped.b;
+      carryL += shipped.l;
       for (let i = 0; i < res.length; i++) {
         const s = res[i];
         if (s.mo !== m || s.meth !== "Air") continue;
-        const bCov = cumB >= cumD;  // bases already covered cumulatively
-        const lCov = cumL >= cumD;  // lids already covered cumulatively
         const hasB = s.bQ > 0, hasL = s.lQ > 0;
-        if ((hasB && bCov) && (hasL && lCov)) { toRemove.add(i); }        // both covered
-        else if (hasB && !hasL && bCov)        { toRemove.add(i); }        // base-only, covered
-        else if (hasL && !hasB && lCov)        { toRemove.add(i); }        // lid-only, covered
-        else { cumB += s.bQ; cumL += s.lQ; }  // genuinely needed
+        // Air is redundant if carry-over already covers this month's demand
+        const bCov = carryB >= dem;
+        const lCov = carryL >= dem;
+        if (hasB && hasL && bCov && lCov) { toRemove.add(i); }
+        else if (hasB && !hasL && bCov)   { toRemove.add(i); }
+        else if (hasL && !hasB && lCov)   { toRemove.add(i); }
+        else {
+          // Genuinely needed — count it and reduce carry-over accordingly
+          if (hasB) carryB += s.bQ;
+          if (hasL) carryL += s.lQ;
+        }
       }
+      // Carry forward surplus over demand into next month
+      carryB = Math.max(0, carryB - dem);
+      carryL = Math.max(0, carryL - dem);
     }
-    const removeList = [...toRemove].sort((a,b) => b-a);
+    const removeList = [...toRemove].sort((a, b) => b - a);
     for (const i of removeList) res.splice(i, 1);
   }
+
   res.sort((a, b) => a.mo - b.mo || moOrder[a.meth] - moOrder[b.meth] || a.bSd - b.bSd);
   return res;
 }
