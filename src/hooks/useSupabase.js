@@ -1,6 +1,7 @@
 // useSupabase.js
 // Syncs the full scenarios array to a Supabase table (single row, id=1).
 // No auth required — public RLS policies allow anonymous read/write.
+// If DB is empty on first load, immediately saves the default scenarios.
 
 import { useEffect, useRef, useCallback, useState } from "react";
 
@@ -11,31 +12,11 @@ const ROW_URL      = `${SUPABASE_URL}/rest/v1/scenarios?id=eq.1`;
 const DEBOUNCE_MS  = 1500;
 
 export function useSupabase(scenarios, setScenarios) {
-  const [status, setStatus]     = useState("idle"); // idle | loading | saving | saved | error
-  const [error, setError]       = useState(null);
-  const saveTimer               = useRef(null);
-  const lastSaved               = useRef(null);
-  const initialLoadDone         = useRef(false);
-
-  // ── READ ──────────────────────────────────────────────────────────────────
-  const loadFromDB = useCallback(async () => {
-    setStatus("loading");
-    try {
-      const res = await fetch(ROW_URL, { headers: HEADERS });
-      if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
-      const rows = await res.json();
-      if (rows.length > 0 && Array.isArray(rows[0].data) && rows[0].data.length > 0) {
-        setScenarios(rows[0].data);
-      }
-      setStatus("saved");
-      initialLoadDone.current = true;
-    } catch (e) {
-      console.error("Supabase load error:", e);
-      setError(e.message);
-      setStatus("error");
-      initialLoadDone.current = true; // still allow local use
-    }
-  }, [setScenarios]);
+  const [status, setStatus]   = useState("idle");
+  const [error, setError]     = useState(null);
+  const saveTimer             = useRef(null);
+  const lastSaved             = useRef(null);
+  const initialLoadDone       = useRef(false);
 
   // ── WRITE ─────────────────────────────────────────────────────────────────
   const saveToDB = useCallback(async (data) => {
@@ -59,6 +40,31 @@ export function useSupabase(scenarios, setScenarios) {
     }
   }, []);
 
+  // ── READ ──────────────────────────────────────────────────────────────────
+  // Pass currentScenarios so we can immediately save defaults if DB is empty
+  const loadFromDB = useCallback(async (currentScenarios) => {
+    setStatus("loading");
+    try {
+      const res = await fetch(ROW_URL, { headers: HEADERS });
+      if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+      const rows = await res.json();
+      if (rows.length > 0 && Array.isArray(rows[0].data) && rows[0].data.length > 0) {
+        // DB has data — load it into state
+        setScenarios(rows[0].data);
+        setStatus("saved");
+      } else {
+        // DB is empty — write the current default (Base Plan) up to Supabase now
+        await saveToDB(currentScenarios);
+      }
+      initialLoadDone.current = true;
+    } catch (e) {
+      console.error("Supabase load error:", e);
+      setError(e.message);
+      setStatus("error");
+      initialLoadDone.current = true;
+    }
+  }, [setScenarios, saveToDB]);
+
   // ── AUTO-SAVE (debounced) ─────────────────────────────────────────────────
   useEffect(() => {
     if (!initialLoadDone.current) return;
@@ -68,7 +74,8 @@ export function useSupabase(scenarios, setScenarios) {
   }, [scenarios, saveToDB]);
 
   // ── INITIAL LOAD ──────────────────────────────────────────────────────────
-  useEffect(() => { loadFromDB(); }, [loadFromDB]);
+  // Pass scenarios (the default Base Plan) so it can be saved if DB is empty
+  useEffect(() => { loadFromDB(scenarios); }, []); // eslint-disable-line
 
-  return { status, error, reload: loadFromDB };
+  return { status, error, reload: () => loadFromDB(scenarios) };
 }
