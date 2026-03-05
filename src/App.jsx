@@ -6,6 +6,7 @@ import { T, tbl, th, td } from "./utils/theme";
 import DemandTab from "./components/DemandTab";
 import ShippingTab from "./components/ShippingTab";
 import SettingsTab from "./components/SettingsTab";
+import AiAssistant from "./components/AiAssistant";
 
 export default function App() {
   const [tab, setTab] = useState("demand");
@@ -71,6 +72,7 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"shipping", l:
         {tab === "shipping" && <ShippingTab ships={ships} prod={prod} frt={frt} gld={gld} />}
         {tab === "settings" && <SettingsTab sc={sc} cap={cap} upd={upd} />}
       </>)}
+      <AiAssistant sc={sc} gld={gld} ships={ships} prod={prod} frt={frt} cap={cap} />
     </div>
   );
 }
