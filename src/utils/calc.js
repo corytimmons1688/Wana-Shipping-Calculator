@@ -281,3 +281,59 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   res.sort((a, b) => a.mo - b.mo || mo[a.meth] - mo[b.meth]);
   return res;
 }
+
+export function calcWeeklyDemand(mkts) {
+  // Build weekly demand timeline from SKU detail data + monthly fallback
+  // Returns array of {date, demand} for each week from Mar 9 to Dec 28
+  var S = new Date("2026-03-09");
+  var weeks = [];
+  for (var w = 0; w < 43; w++) {
+    var wk = new Date(S); wk.setDate(wk.getDate() + w * 7);
+    weeks.push({ wk: wk, demand: 0 });
+  }
+
+  for (var mi = 0; mi < mkts.length; mi++) {
+    var mk = mkts[mi];
+    if (mk.goLive == null) continue;
+
+    if (mk.skuDetail && mk.skuDetail.weeks && mk.skuDetail.skus) {
+      // Use weekly SKU data
+      var det = mk.skuDetail;
+      for (var si = 0; si < det.skus.length; si++) {
+        var sku = det.skus[si];
+        for (var wi = 0; wi < sku.weekly.length && wi < det.weeks.length; wi++) {
+          if (sku.weekly[wi] <= 0) continue;
+          var skuDate = new Date(det.weeks[wi]);
+          // Find the matching production week
+          for (var pwi = 0; pwi < weeks.length; pwi++) {
+            var diff = Math.abs(weeks[pwi].wk.getTime() - skuDate.getTime());
+            if (diff < 4 * 86400000) { // within 4 days
+              weeks[pwi].demand += sku.weekly[wi];
+              break;
+            }
+          }
+        }
+      }
+    } else {
+      // Monthly fallback: spread evenly across weeks in each month
+      for (var mo = 0; mo < 12; mo++) {
+        if (mo + 1 < mk.goLive) continue;
+        var mDem = mk.demand[mo] || 0;
+        if (mDem <= 0) continue;
+        // Find weeks in this month
+        var mWeeks = [];
+        for (var pwi2 = 0; pwi2 < weeks.length; pwi2++) {
+          if (weeks[pwi2].wk.getMonth() === mo) mWeeks.push(pwi2);
+        }
+        if (mWeeks.length > 0) {
+          var perWk = mDem / mWeeks.length;
+          for (var mwi = 0; mwi < mWeeks.length; mwi++) {
+            weeks[mWeeks[mwi]].demand += perWk;
+          }
+        }
+      }
+    }
+  }
+
+  return weeks;
+}
