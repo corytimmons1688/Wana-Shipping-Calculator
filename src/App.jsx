@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { useGoogleSheets } from "./hooks/useGoogleSheets";
+import { useSupabase } from "./hooks/useSupabase";
 import { initScenario, mkScenario } from "./data/defaults";
 import { calcGLD, calcProd, calcCap, optimize, calcWeeklyDemand } from "./utils/calc";
 import { fm, f$, fC, dc } from "./utils/format";
@@ -31,7 +31,7 @@ export default function App() {
   const dupeSc = () => { const ns = mkScenario(sc.name + " (copy)", sc); setScenarios(p => [...p, ns]); setActive(scenarios.length); };
   const delSc = (idx) => { if (scenarios.length <= 1) return; setScenarios(p => p.filter((_, i) => i !== idx)); setActive(a => idx < a ? a - 1 : idx === a ? Math.min(a, scenarios.length - 2) : a); };
   const renameSc = (idx, name) => { setScenarios(p => p.map((s, i) => i === idx ? { ...s, name } : s)); };
-  const { status: syncStatus, error: syncError, configured: syncConfigured } = useGoogleSheets(scenarios, setScenarios);
+  const { status: syncStatus, error: syncError } = useSupabase(scenarios, setScenarios);
   const [renaming, setRenaming] = useState(null);
   const [renameVal, setRenameVal] = useState("");
   const CmpView = () => {
@@ -47,18 +47,11 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"shipping", l:
         <div><div style={{ fontSize:16, fontWeight:800, letterSpacing:"-0.5px" }}><span style={{ color:T.GR }}>Wana</span> Production & Shipping</div><div style={{ color:T.T2, fontSize:9, marginTop:1 }}>2026 Launch {"—"} Shipping Optimizer</div></div>
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
           <div style={{ background:T.S2, borderRadius:5, padding:"3px 9px", border:"1px solid "+T.BD }}><span style={{ color:T.T2, fontSize:9 }}>Freight </span><span style={{ color:T.AM, fontWeight:700, fontFamily:"'JetBrains Mono',monospace", fontSize:12 }}>{f$(frt.tot)}</span></div>
-          {syncConfigured && (
-            <div title={syncError || ""} style={{ background:T.S2, borderRadius:5, padding:"3px 9px", border:"1px solid "+(syncStatus==="error"?"#dc2626":syncStatus==="saving"?T.AM:syncStatus==="saved"?T.GR:T.BD), display:"flex", alignItems:"center", gap:4 }}>
-              <span style={{ fontSize:9, color: syncStatus==="error"?"#dc2626":syncStatus==="saving"?T.AM:syncStatus==="saved"?T.GR:T.T2 }}>
-                {syncStatus==="loading"?"⟳ Loading…":syncStatus==="saving"?"⟳ Saving…":syncStatus==="saved"?"✓ Saved":syncStatus==="error"?"✕ Sync error":"○ Sheets"}
-              </span>
-            </div>
-          )}
-          {!syncConfigured && (
-            <div title="Add VITE_SHEETS_API_KEY and VITE_SHEET_ID to .env to enable cloud sync" style={{ background:T.S2, borderRadius:5, padding:"3px 9px", border:"1px solid "+T.BD, cursor:"help" }}>
-              <span style={{ fontSize:9, color:T.T2 }}>○ Local only</span>
-            </div>
-          )}
+          <div title={syncError || ""} style={{ background:T.S2, borderRadius:5, padding:"3px 9px", border:"1px solid "+(syncStatus==="error"?"#dc2626":syncStatus==="saving"?T.AM:syncStatus==="saved"?T.GR:T.BD), display:"flex", alignItems:"center", gap:4 }}>
+            <span style={{ fontSize:9, color: syncStatus==="error"?"#dc2626":syncStatus==="saving"?T.AM:syncStatus==="saved"?T.GR:T.T2 }}>
+              {syncStatus==="loading"?"⟳ Loading…":syncStatus==="saving"?"⟳ Saving…":syncStatus==="saved"?"✓ Saved":syncStatus==="error"?"✕ Sync error":"○ Connecting…"}
+            </span>
+          </div>
         </div>
       </div>
       <div style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 18px", background:T.S2, borderBottom:"1px solid "+T.BD, flexWrap:"wrap" }}>
