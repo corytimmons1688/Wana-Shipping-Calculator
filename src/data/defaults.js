@@ -17,7 +17,7 @@ export const MARKETS = [
   {name:"Nevada",goLive:null,priority:false,demand:[0,0,25500,26288,31320,23870,27280,19080,24180,21600,22320,0]},
   {name:"New Jersey",goLive:5,priority:true,demand:[32736,34160,41602,42090,45384,50220,55800,59520,71400,89280,102600,124000]},
   {name:"New Mexico",goLive:11,priority:false,demand:[28374,25628,36270,34200,28374,27459,28374,28374,27459,28374,27459,28374]},
-  {name:"New York",goLive:7,priority:true,demand:[13392,16660,19530,19950,19879,27900,39130,50778,61718,78120,75600,78120]},
+  {name:"New York",goLive:6,priority:true,demand:[13392,16660,19530,19950,19879,27900,39130,50778,61718,78120,75600,78120]},
   {name:"Ohio",goLive:9,priority:true,demand:[42408,38538,53061,42289,42069,43158,44115,45879,38917,41777,50625,52313]},
   {name:"Oklahoma",goLive:11,priority:false,demand:[5055,5513,6082,6056,5021,4490,5077,6244,4875,5593,4190,5834]},
   {name:"Puerto Rico",goLive:null,priority:false,demand:[0,0,0,0,0,0,0,0,0,0,0,0]},
