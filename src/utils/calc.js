@@ -59,10 +59,20 @@ function addDays(date, n) {
   const d = new Date(date); d.setDate(d.getDate() + n); return d;
 }
 
-function packOne(bAvail, lAvail, maxPal, minPal, bPP, lPP) {
+// Pack one container. Prioritizes lids (bottleneck), fills remaining space with bases.
+// subPallet: allow packing fewer lids than one full pallet (for residual mop-up).
+//   When true, packs lAvail lids exactly rather than flooring to full pallets.
+//   This prevents tiny lid residuals (e.g. 280 lids) from falling through to Air.
+function packOne(bAvail, lAvail, maxPal, minPal, bPP, lPP, subPallet) {
+  // Standard full-pallet packing
   for (let lp = Math.min(maxPal, Math.floor(lAvail / lPP)); lp >= 0; lp--) {
     const bp = Math.min(maxPal - lp, Math.floor(bAvail / bPP));
     if (lp + bp >= minPal) return { bQ: bp * bPP, lQ: lp * lPP, bPallets: bp, lPallets: lp };
+  }
+  // Sub-pallet fallback: pack lAvail lids exactly (fractional pallet counts as 1 slot)
+  if (subPallet && lAvail > 0) {
+    const bp = Math.min(maxPal - 1, Math.floor(bAvail / bPP));
+    if (1 + bp >= minPal) return { bQ: bp * bPP, lQ: lAvail, bPallets: bp, lPallets: 1 };
   }
   return null;
 }
@@ -100,7 +110,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     return { bS: Math.max(0, p.bC - c.bC), lS: Math.max(0, p.lC - c.lC) };
   }
 
-  function fillAt(method, d, shipDate, transitDays, bMax, lMax, preShip, stopWhenLidsDone, minPalOverride) {
+  function fillAt(method, d, shipDate, transitDays, bMax, lMax, preShip, stopWhenLidsDone, minPalOverride, subPallet) {
     const a = availAt(shipDate);
     let remB = Math.min(a.bS, Math.max(0, bMax));
     let remL = Math.min(a.lS, Math.max(0, lMax));
@@ -112,7 +122,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
       const cost = method === "Standard Ocean" ? 0 : ck.cost;
       while (remB + remL > 0) {
         if (stopWhenLidsDone && d.lNeed <= 0) break;
-        const r = packOne(remB, remL, maxPal, minPal, pal.basePP, pal.lidPP);
+        const r = packOne(remB, remL, maxPal, minPal, pal.basePP, pal.lidPP, subPallet);
         if (!r) break;
         res.push({ mo: d.mo, meth: method, cn: ck.label,
           bQ: r.bQ, lQ: r.lQ, tQ: r.bQ + r.lQ, cost,
@@ -130,15 +140,19 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   const minContPal = Math.min(...Object.values(cont).map(c => c.minPal || (c.pallets <= 10 ? 8 : 16)));
   const padBases = minContPal * pal.basePP;
 
-  // PHASE 1 — Ocean
+  // ════════════════════════════════════════════════════════════════════════════
+  // PHASE 1a — Ocean: backward scan, base deadline window.
+  // ════════════════════════════════════════════════════════════════════════════
   if (oc) {
     for (const d of demands) {
       const ocBD = addDays(d.bDeadline, -oc.transitDays);
       const validWeeks = prod.filter(pw => pw.wk <= ocBD);
       for (let i = validWeeks.length - 1; i >= 0 && (d.bNeed > 0 || d.lNeed > 0); i--) {
-        fillAt("Standard Ocean", d, validWeeks[i].wk, oc.transitDays, d.bNeed, d.lNeed, false, false, null);
+        fillAt("Standard Ocean", d, validWeeks[i].wk, oc.transitDays, d.bNeed, d.lNeed, false, false, null, false);
       }
     }
+
+    // Phase 1b: lid deadline window (extra weeks between base/lid deadlines)
     for (const d of demands) {
       if (d.lNeed <= 0) continue;
       const ocLD = addDays(d.lDeadline, -oc.transitDays);
@@ -146,17 +160,36 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
       if (ocLD <= ocBD) continue;
       const extraWeeks = prod.filter(pw => pw.wk > ocBD && pw.wk <= ocLD);
       for (let i = extraWeeks.length - 1; i >= 0 && d.lNeed > 0; i--) {
-        fillAt("Standard Ocean", d, extraWeeks[i].wk, oc.transitDays, padBases, d.lNeed, false, true, null);
+        fillAt("Standard Ocean", d, extraWeeks[i].wk, oc.transitDays, padBases, d.lNeed, false, true, null, false);
+      }
+    }
+
+    // Phase 1c: Ocean mop-up — forward scan with sub-pallet lid support.
+    // After 1a/1b fill full containers, sub-pallet residuals (e.g. 280 lids)
+    // remain. Forward scan finds the earliest week with available production
+    // and packs residuals using base padding. With abundant production this
+    // eliminates the Air fallback for free via Ocean.
+    for (const d of demands) {
+      if (d.bNeed <= 0 && d.lNeed <= 0) continue;
+      const ocBD = addDays(d.bDeadline, -oc.transitDays);
+      const ocLD = addDays(d.lDeadline, -oc.transitDays);
+      const deadline = d.bNeed > 0 ? ocBD : ocLD;
+      const validWeeks = prod.filter(pw => pw.wk <= deadline);
+      for (let i = 0; i < validWeeks.length && (d.bNeed > 0 || d.lNeed > 0); i++) {
+        fillAt("Standard Ocean", d, validWeeks[i].wk, oc.transitDays,
+          d.bNeed > 0 ? d.bNeed : padBases,
+          d.lNeed, false, false, 1, true);
       }
     }
   }
 
-  // PHASE 2 — Fast Boat lid shipments
+  // ════════════════════════════════════════════════════════════════════════════
+  // PHASE 2 — Fast Boat lid shipments (full containers).
+  // ════════════════════════════════════════════════════════════════════════════
   if (fb) {
     for (const d of demands) {
       if (d.lNeed <= 0) continue;
       const lSD = addDays(d.lDeadline, -fb.transitDays);
-
       if (d.lNeed >= pal.lidPP) {
         const bMaxFB = Math.max(d.bNeed, padBases);
         const a = availAt(lSD);
@@ -167,7 +200,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
           const maxPal = ck.pallets;
           const minPal = ck.minPal || (maxPal <= 10 ? 8 : 16);
           while (d.lNeed > 0 && remL > 0) {
-            const r = packOne(remB, remL, maxPal, minPal, pal.basePP, pal.lidPP);
+            const r = packOne(remB, remL, maxPal, minPal, pal.basePP, pal.lidPP, false);
             if (!r || r.lQ === 0) break;
             const arrDate = addDays(lSD, fb.transitDays);
             res.push({ mo: d.mo, meth: "Fast Boat", cn: ck.label,
@@ -185,56 +218,55 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     }
   }
 
-  // PHASE 3 — Fast Boat base/lid residuals (sub-pallet leftovers)
-  // FIX: Use per-unit cost comparison instead of total cost vs container cost.
-  // FB 20HC at $9,500 breaks even at 11,875 units ($0.80/unit Air).
-  // FB 40HC at $14,300 breaks even at 17,875 units.
-  // Use minPalOverride=1 to allow partial containers.
-  // Also handle lid residuals here, not just bases.
+  // ════════════════════════════════════════════════════════════════════════════
+  // PHASE 3 — Fast Boat residuals (any remaining demand after Ocean/FB full passes).
+  // Uses subPallet=true so fractional lid pallets are packed exactly.
+  // ════════════════════════════════════════════════════════════════════════════
   if (fb) {
     for (const d of demands) {
       const bSD = addDays(d.bDeadline, -fb.transitDays);
       const lSD = addDays(d.lDeadline, -fb.transitDays);
 
-      // Ship remaining bases via FB if it beats Air on a per-unit basis
       if (d.bNeed > 0) {
-        const shipDate = bSD;
-        // Find cheapest FB container cost per unit for this quantity
-        let fbCheapest = Infinity;
+        let fbCheapestPerUnit = Infinity;
         for (const ck of Object.values(cont)) {
-          const unitsPerCont = ck.pallets * pal.basePP;
-          if (d.bNeed >= pal.basePP) { // at least 1 pallet
-            fbCheapest = Math.min(fbCheapest, ck.cost / Math.min(d.bNeed, unitsPerCont));
-          }
+          const maxUnits = ck.pallets * pal.basePP;
+          fbCheapestPerUnit = Math.min(fbCheapestPerUnit, ck.cost / Math.min(d.bNeed, maxUnits));
         }
-        const airPerUnit = airCost.base;
-        if (fbCheapest < airPerUnit || d.bNeed >= pal.basePP) {
-          fillAt("Fast Boat", d, shipDate, fb.transitDays, d.bNeed, 0, false, false, 1);
+        if (d.bNeed >= pal.basePP || fbCheapestPerUnit < airCost.base) {
+          fillAt("Fast Boat", d, bSD, fb.transitDays, d.bNeed, 0, false, false, 1, false);
         }
       }
 
-      // Ship remaining lids via FB if any left (lid residuals missed by Phase 2)
-      if (d.lNeed > 0 && d.lNeed >= pal.lidPP) {
-        const shipDate = lSD;
+      if (d.lNeed > 0) {
         const bMaxFB = Math.max(d.bNeed, padBases);
-        fillAt("Fast Boat", d, shipDate, fb.transitDays, bMaxFB, d.lNeed, false, false, 1);
+        fillAt("Fast Boat", d, lSD, fb.transitDays, bMaxFB, d.lNeed, false, false, 1, true);
       }
     }
   }
 
-  // PHASE 4 — Air: last resort for genuine production gaps
+  // ════════════════════════════════════════════════════════════════════════════
+  // PHASE 4 — Air: last resort for genuine production gaps only.
+  // Ships EXACT quantities — no pallet rounding.
+  // When production is abundant, Phases 1c and 3 should eliminate all Air.
+  // Air only appears when production is not ready before Ocean/FB deadlines.
+  // ════════════════════════════════════════════════════════════════════════════
   if (ar) {
     const abPP = pal.airBasePP || 7500, alPP = pal.airLidPP || 25000;
     for (const d of demands) {
       if (d.bNeed <= 0 && d.lNeed <= 0) continue;
       const bSD = addDays(d.bDeadline, -ar.transitDays);
-      const bQ = d.bNeed > 0 ? Math.ceil(d.bNeed / abPP) * abPP : 0;
-      const lQ = d.lNeed > 0 ? Math.ceil(d.lNeed / alPP) * alPP : 0;
+      // Exact quantities — removing the ceil() rounding that inflated
+      // a 280-lid residual into a 25,000-unit Air shipment.
+      const bQ = d.bNeed > 0 ? d.bNeed : 0;
+      const lQ = d.lNeed > 0 ? d.lNeed : 0;
       if (bQ + lQ > 0) {
         res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ, lQ, tQ: bQ + lQ,
           cost: bQ * airCost.base + lQ * airCost.lid,
-          bSd: new Date(bSD), lSd: new Date(bSD), bAr: addDays(bSD, ar.transitDays), lAr: addDays(bSD, ar.transitDays),
-          bPal: bQ > 0 ? Math.ceil(bQ / abPP) : 0, lPal: lQ > 0 ? Math.ceil(lQ / alPP) : 0, preShip: false });
+          bSd: new Date(bSD), lSd: new Date(bSD),
+          bAr: addDays(bSD, ar.transitDays), lAr: addDays(bSD, ar.transitDays),
+          bPal: bQ > 0 ? Math.ceil(bQ / abPP) : 0,
+          lPal: lQ > 0 ? Math.ceil(lQ / alPP) : 0, preShip: false });
         d.bNeed = 0; d.lNeed = 0;
       }
     }
@@ -243,46 +275,36 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   const moOrder = { "Standard Ocean": 0, "Fast Boat": 1, "Air": 2 };
   res.sort((a, b) => a.mo - b.mo || moOrder[a.meth] - moOrder[b.meth] || a.bSd - b.bSd);
 
-  // POST-PASS: Remove Air shipments made unnecessary by cumulative surplus.
-  // FIX: Track per-month shipped vs needed rather than cumulative totals.
-  // Cumulative comparison was masking genuine per-month shortfalls and
-  // failing to remove redundant Air when earlier months had small Air residuals.
+  // ════════════════════════════════════════════════════════════════════════════
+  // POST-PASS: Remove Air shipments made redundant by cumulative carry-over.
+  // ════════════════════════════════════════════════════════════════════════════
   {
     const toRemove = new Set();
-    // Build per-month non-Air totals first
-    const moShipped = {}; // mo -> { b, l }
+    const moShipped = {};
     for (const s of res) {
       if (s.meth === "Air") continue;
       if (!moShipped[s.mo]) moShipped[s.mo] = { b: 0, l: 0 };
       moShipped[s.mo].b += s.bQ;
       moShipped[s.mo].l += s.lQ;
     }
-    // Accumulate carry-over: surplus from earlier months can cover later months
     let carryB = 0, carryL = 0;
     const months = [...new Set(res.map(s => s.mo))].sort((a, b) => a - b);
     for (const m of months) {
       const shipped = moShipped[m] || { b: 0, l: 0 };
       const dem = gld[m] || 0;
-      // Carry-over from previous months plus this month's non-Air shipments
       carryB += shipped.b;
       carryL += shipped.l;
       for (let i = 0; i < res.length; i++) {
         const s = res[i];
         if (s.mo !== m || s.meth !== "Air") continue;
         const hasB = s.bQ > 0, hasL = s.lQ > 0;
-        // Air is redundant if carry-over already covers this month's demand
         const bCov = carryB >= dem;
         const lCov = carryL >= dem;
         if (hasB && hasL && bCov && lCov) { toRemove.add(i); }
         else if (hasB && !hasL && bCov)   { toRemove.add(i); }
         else if (hasL && !hasB && lCov)   { toRemove.add(i); }
-        else {
-          // Genuinely needed — count it and reduce carry-over accordingly
-          if (hasB) carryB += s.bQ;
-          if (hasL) carryL += s.lQ;
-        }
+        else { if (hasB) carryB += s.bQ; if (hasL) carryL += s.lQ; }
       }
-      // Carry forward surplus over demand into next month
       carryB = Math.max(0, carryB - dem);
       carryL = Math.max(0, carryL - dem);
     }
