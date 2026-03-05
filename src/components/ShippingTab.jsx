@@ -154,8 +154,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lids</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Cost</th>
                 <th style={{ ...th, textAlign:"left", fontSize:9, top:28, zIndex:2 }}>Arrival</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Arr</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Arr</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base In</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid In</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Wk Demand</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Cum Demand</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Stk</th>
@@ -184,8 +184,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
                     <td style={{ ...td, textAlign:"right", fontWeight:firstShip?600:400, color:T.AC }}>{firstShip && firstShip.lQ > 0 ? fm(firstShip.lQ) : ""}</td>
                     <td style={{ ...td, textAlign:"right", color:firstShip&&firstShip.cost>0?T.AM:T.GR, fontWeight:firstShip?600:400 }}>{firstShip ? (firstShip.cost===0?"FREE":f$(firstShip.cost)) : ""}</td>
                     <td style={{ ...td, color:T.T2, fontSize:11 }}>{firstShip ? dF(firstShip.bAr) : ""}</td>
-                    <td style={{ ...td, textAlign:"right", color:T.GR }}>{r.cumArrB>0?fm(r.cumArrB):""}</td>
-                    <td style={{ ...td, textAlign:"right", color:T.AC }}>{r.cumArrL>0?fm(r.cumArrL):""}</td>
+                    <td style={{ ...td, textAlign:"right", color:T.GR, fontWeight:r.arrB>0?600:400 }}>{r.arrB>0?fm(r.arrB):""}</td>
+                    <td style={{ ...td, textAlign:"right", color:T.AC, fontWeight:r.arrL>0?600:400 }}>{r.arrL>0?fm(r.arrL):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.monthDemand>0?"#9333ea":T.T2 }}>{r.monthDemand>0?fm(r.monthDemand):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.T2, fontSize:11 }}>{r.cumDemand>0?fm(r.cumDemand):""}</td>
                     <td style={{ ...td, textAlign:"right", fontWeight:600, color:r.stockB<0?"#dc2626":r.stockB>0?T.GR:T.T2 }}>{r.cumArrB>0||r.cumDemand>0?fm(r.stockB):""}</td>
