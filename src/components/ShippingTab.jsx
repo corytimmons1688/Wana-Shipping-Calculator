@@ -184,7 +184,7 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
                   var subHl = hl === "u"+i;
                   return (
                     <tr key={"s"+i+"-"+si} onClick={function() { setHl(hl === "u"+i ? null : "u"+i); }} style={{ background: subHl ? hlBg : (i%2===0?"transparent":T.S2), cursor:"pointer" }}>
-                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
+                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
                       <td style={td}><Bg method={esh.meth}/></td>
                       <td style={{ ...td, textAlign:"right", fontWeight:600, color:T.GR }}>{esh.bQ > 0 ? fm(esh.bQ) : ""}</td>
                       <td style={{ ...td, textAlign:"right", fontWeight:600, color:T.AC }}>{esh.lQ > 0 ? fm(esh.lQ) : ""}</td>
