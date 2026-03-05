@@ -50,7 +50,7 @@ export default function SettingsTab({ sc, cap, upd }) {
   );
 
   function tlTbl({ data, title }) {
-    <div><div style={{ fontSize: 13, fontWeight: 700, color: T.TX, marginBottom: 8 }}>{title}</div>
+    return (<div><div style={{ fontSize: 13, fontWeight: 700, color: T.TX, marginBottom: 8 }}>{title}</div>
       <table style={{ ...tbl, maxWidth: 550 }}><thead><tr><th style={th}>Step</th><th style={th}>Start</th><th style={th}>End</th><th style={{ ...th, textAlign: "right" }}>Days</th></tr></thead><tbody>
         {data.map((r, i) => <tr key={i} style={{ background: i % 2 === 0 ? "transparent" : T.S2 + "28" }}><td style={{ ...td, fontWeight: 600 }}>{r.step}</td><td style={{ ...td, color: T.T2 }}>{r.start}</td><td style={{ ...td, color: T.T2 }}>{r.end}</td><td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{r.days}</td></tr>)}
       </tbody></table></div>);
