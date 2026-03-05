@@ -13,7 +13,7 @@ export default function SettingsTab({ sc, cap, upd }) {
     { k: "par", l: "Parameters" },
   ];
 
-  function MoldPanel({ label, type, color, icon }) {
+  function moldPanel({ label, type, color, icon }) {
     const m = sc.molds[type];
     return (
       <div style={{ flex: "1 1 280px", minWidth: 280, background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD }}>
@@ -42,21 +42,21 @@ export default function SettingsTab({ sc, cap, upd }) {
     );
   }
 
-  const MoldSet = () => (
+  const moldSet = () => (
     <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-      <MoldPanel label="Base (Jar / HDPE)" type="base" color={T.GR} icon={"\u2B22"} />
-      <MoldPanel label="Lid (Cap / PP)" type="lid" color={T.AC} icon={"\u2B21"} />
+      {moldPanel({ label:"Base (Jar / HDPE)", type:"base", color:T.GR, icon:"\u2B22" })}
+      {moldPanel({ label:"Lid (Cap / PP)", type:"lid", color:T.AC, icon:"\u2B21" })}
     </div>
   );
 
-  const TLTbl = ({ data, title }) => (
+  function tlTbl({ data, title }) {
     <div><div style={{ fontSize: 13, fontWeight: 700, color: T.TX, marginBottom: 8 }}>{title}</div>
       <table style={{ ...tbl, maxWidth: 550 }}><thead><tr><th style={th}>Step</th><th style={th}>Start</th><th style={th}>End</th><th style={{ ...th, textAlign: "right" }}>Days</th></tr></thead><tbody>
         {data.map((r, i) => <tr key={i} style={{ background: i % 2 === 0 ? "transparent" : T.S2 + "28" }}><td style={{ ...td, fontWeight: 600 }}>{r.step}</td><td style={{ ...td, color: T.T2 }}>{r.start}</td><td style={{ ...td, color: T.T2 }}>{r.end}</td><td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{r.days}</td></tr>)}
-      </tbody></table></div>
-  );
+      </tbody></table></div>);
+  }
 
-  const FCTbl = () => {
+  function fcTbl() {
     let t = 0; for (const r of sc.forecast) t += r.qty;
     return (
       <div><div style={{ fontSize: 13, fontWeight: 700, color: T.TX, marginBottom: 8 }}>Supplier Forecast (Canopy Cube)</div>
@@ -67,14 +67,14 @@ export default function SettingsTab({ sc, cap, upd }) {
     );
   };
 
-  const PKTbl = () => (
+  function pkTbl() { return (
     <div><div style={{ fontSize: 13, fontWeight: 700, color: T.TX, marginBottom: 8 }}>Packing List</div>
       <table style={{ ...tbl, maxWidth: 750 }}><thead><tr><th style={th}>Container</th><th style={th}>Item</th><th style={{ ...th, textAlign: "right" }}>Pallets</th><th style={{ ...th, textAlign: "right" }}>Qty/Cont</th><th style={{ ...th, textAlign: "right" }}>Weight</th><th style={{ ...th, textAlign: "right" }}>CBM</th></tr></thead><tbody>
         {sc.pkl.map((r, i) => <tr key={i} style={{ background: i % 2 === 0 ? "transparent" : T.S2 + "28" }}><td style={{ ...td, fontWeight: 600 }}>{r.cont}</td><td style={td}>{r.item}</td><td style={{ ...td, textAlign: "right" }}>{r.pallets}</td><td style={{ ...td, textAlign: "right" }}>{fm(r.qpc)}</td><td style={{ ...td, textAlign: "right", color: T.T2 }}>{r.wt}</td><td style={{ ...td, textAlign: "right", color: T.T2 }}>{r.cbm}</td></tr>)}
       </tbody></table></div>
   );
 
-  const ShipSet = () => (
+  function shipSet() { return (
     <div style={{ maxWidth: 600 }}>
       <table style={tbl}><thead><tr><th style={th}>Method</th><th style={{ ...th, textAlign: "right" }}>Transit</th><th style={{ ...th, textAlign: "right" }}>Cost/Unit</th><th style={th}>Notes</th></tr></thead><tbody>
         {sc.shipping.map((s, i) => <tr key={i}><td style={td}><Bg method={s.method} /></td><td style={{ ...td, textAlign: "right" }}><Ed value={s.transitDays} onChange={v => upd(sc2 => { sc2.shipping[i].transitDays = v; })} /></td><td style={{ ...td, textAlign: "right" }}><Ed value={s.costPerUnit} onChange={v => upd(sc2 => { sc2.shipping[i].costPerUnit = v; })} /></td><td style={{ ...td, color: T.T2, fontSize: 11 }}>{s.notes}</td></tr>)}
@@ -93,7 +93,7 @@ export default function SettingsTab({ sc, cap, upd }) {
     </div>
   );
 
-  const ParSet = () => (
+  function parSet() { return (
     <div style={{ maxWidth: 520 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Lead Times & Rounding</div>
       <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD, marginBottom: 12 }}>
@@ -143,13 +143,13 @@ export default function SettingsTab({ sc, cap, upd }) {
           return <button key={t.k} onClick={() => setStab(t.k)} style={{ padding: "7px 14px", border: "none", borderBottom: a ? "2px solid " + T.AC : "2px solid transparent", background: "transparent", color: a ? T.AC : T.T2, cursor: "pointer", fontSize: 11, fontWeight: a ? 700 : 500, whiteSpace: "nowrap", fontFamily: "inherit" }}>{t.l}</button>;
         })}
       </div>
-      {stab === "molds" && <MoldSet />}
-      {stab === "ptl" && <TLTbl data={sc.protoTL} title="Prototype Timeline" />}
-      {stab === "mtl" && <TLTbl data={sc.prodTL} title="Production Timeline" />}
-      {stab === "fc" && <FCTbl />}
-      {stab === "pkl" && <PKTbl />}
-      {stab === "ship" && <ShipSet />}
-      {stab === "par" && <ParSet />}
+      {stab === "molds" && moldSet()}
+      {stab === "ptl" && tlTbl({ data:sc.protoTL, title:"Prototype Timeline" })}
+      {stab === "mtl" && tlTbl({ data:sc.prodTL, title:"Production Timeline" })}
+      {stab === "fc" && fcTbl()}
+      {stab === "pkl" && pkTbl()}
+      {stab === "ship" && shipSet()}
+      {stab === "par" && parSet()}
     </div>
   );
 }
