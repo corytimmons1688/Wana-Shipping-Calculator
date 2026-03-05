@@ -92,17 +92,17 @@ export default function DemandTab({ sc, gld, annD, upd }) {
 
                 skuRows.push(
                   <tr key={"sku-"+mi+"-"+si} style={{ background: si % 2 === 0 ? T.S2+"40" : T.S2+"80" }}>
-                    <td style={{ ...td, paddingLeft: 28, fontSize: 11, color: T.T2 }}>
+                    <td style={{ ...td, paddingLeft: 28, fontSize: 11, color: T.T2, borderLeft: "3px solid "+T.AC+"40" }}>
                       <span style={{ color: T.AC, fontSize: 8, marginRight: 4 }}>{"\u25CB"}</span>
                       {sku.name}
                       {sku.sku && <span style={{ marginLeft: 4, fontSize: 9, color: T.T2+"90" }}>{sku.sku}</span>}
                     </td>
-                    <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2 }}>{sku.cat}</td>
+                    <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2, borderLeft: "3px solid "+T.AC+"40" }}>{sku.cat}</td>
                     {skuMonthly.map(function(v, smi2) {
                       var isStart = smi2 === startMo;
-                      return <td key={smi2} style={{ ...td, textAlign: "right", fontSize: 11, color: v > 0 ? T.TX : T.T2+"50", background: isStart ? "#bbf7d0" : undefined }}>{v > 0 ? fm(Math.round(v)) : ""}</td>;
+                      return <td key={smi2} style={{ ...td, textAlign: "right", fontSize: 10, color: v > 0 ? T.T2 : T.T2+"30", fontStyle: "italic", background: isStart ? "#bbf7d0" : undefined }}>{v > 0 ? fm(Math.round(v)) : ""}</td>;
                     })}
-                    <td style={{ ...td, textAlign: "right", fontSize: 11, fontWeight: 600, color: T.T2 }}>{fm(Math.round(skuAnn))}</td>
+                    <td style={{ ...td, textAlign: "right", fontSize: 10, fontStyle: "italic", color: T.T2 }}>{fm(Math.round(skuAnn))}</td>
                   </tr>
                 );
               }
