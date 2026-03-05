@@ -27,7 +27,6 @@ export default function SettingsTab({ sc, cap, upd }) {
                 <div><div style={{ color: T.T2, fontSize: 8 }}>Daily/Mold</div><Ed value={d.daily} onChange={v => upd(s => { s.molds[type][ph].daily = v; })} /></div>
                 <div><div style={{ color: T.T2, fontSize: 8 }}>Num Molds</div><QC value={d.qty} onChange={v => upd(s => { s.molds[type][ph].qty = v; })} /></div>
                 <div><div style={{ color: T.T2, fontSize: 8 }}>Cavities</div><Ed value={d.cav} onChange={v => upd(s => { s.molds[type][ph].cav = v; })} /></div>
-                <div><div style={{ color: T.T2, fontSize: 8 }}>Cost/Mold</div><Ed value={d.cost} onChange={v => upd(s => { s.molds[type][ph].cost = v; })} /></div>
                 <div><div style={{ color: T.T2, fontSize: 8 }}>Avail Date</div><Ed value={d.avail} type="text" onChange={v => upd(s => { s.molds[type][ph].avail = v; })} /></div>
                 <div><div style={{ color: T.T2, fontSize: 8 }}>Days/Wk</div><Ed value={d.days} onChange={v => upd(s => { s.molds[type][ph].days = v; })} /></div>
                 <div><div style={{ color: T.T2, fontSize: 8 }}>Lifespan</div><span style={{ color: T.T2, fontSize: 12, fontFamily: "'JetBrains Mono',monospace" }}>{d.life ? fm(d.life) : "Unlimited"}</span></div>
