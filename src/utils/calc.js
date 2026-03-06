@@ -6,15 +6,22 @@ export function calcGLD(mkts) {
   return r;
 }
 
+// Parse "YYYY-MM-DD" as LOCAL midnight (not UTC) so dates display correctly in all timezones.
+function parseLocalDate(s) {
+  if (!s) return new Date(NaN);
+  const p = s.split("-").map(Number);
+  return new Date(p[0], p[1] - 1, p[2]);
+}
+
 export function calcProd(molds) {
-  const S = new Date("2026-03-09"), wks = [];
+  const S = new Date(2026, 2, 9), wks = [];  // Mar 9 local
   let bC = 0, lC = 0, bPU = 0, lPU = 0, bP2U = 0, lP2U = 0;
-  const bPD = new Date(molds.base.proto.avail), bMD = new Date(molds.base.prod.avail);
+  const bPD = parseLocalDate(molds.base.proto.avail), bMD = parseLocalDate(molds.base.prod.avail);
   const bP2 = molds.base.proto2 || null;
-  const bP2D = bP2 ? new Date(bP2.avail) : null;
-  const lPD = new Date(molds.lid.proto.avail), lMD = new Date(molds.lid.prod.avail);
+  const bP2D = bP2 ? parseLocalDate(bP2.avail) : null;
+  const lPD = parseLocalDate(molds.lid.proto.avail), lMD = parseLocalDate(molds.lid.prod.avail);
   const lP2 = molds.lid.proto2 || null;
-  const lP2D = lP2 ? new Date(lP2.avail) : null;
+  const lP2D = lP2 ? parseLocalDate(lP2.avail) : null;
   for (let w = 0; w < 43; w++) {
     const wk = new Date(S); wk.setDate(wk.getDate() + w * 7);
     let bW = 0, lW = 0;
@@ -459,7 +466,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
 }
 
 export function calcWeeklyDemand(mkts) {
-  const S = new Date("2026-03-09");
+  const S = new Date(2026, 2, 9);  // Mar 9 local
   const weeks = [];
   for (let w = 0; w < 43; w++) {
     const wk = new Date(S); wk.setDate(wk.getDate() + w * 7);
@@ -473,7 +480,7 @@ export function calcWeeklyDemand(mkts) {
       for (const sku of det.skus) {
         for (let wi = 0; wi < sku.weekly.length && wi < det.weeks.length; wi++) {
           if (sku.weekly[wi] <= 0) continue;
-          const skuDate = new Date(det.weeks[wi]);
+          const skuDate = parseLocalDate(det.weeks[wi]);
           if (skuDate.getMonth() + 1 < goLiveMonth) continue;
           for (let pwi = 0; pwi < weeks.length; pwi++) {
             if (Math.abs(weeks[pwi].wk - skuDate) < 4 * 86400000) { weeks[pwi].demand += sku.weekly[wi]; break; }
