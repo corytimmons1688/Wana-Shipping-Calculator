@@ -176,17 +176,18 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   const minContPal = Math.min(...Object.values(cont).map(c => c.minPal || (c.pallets <= 10 ? 8 : 16)));
   const padBases = minContPal * pal.basePP;
 
-  // ── PHASE 0 — Reserve Air/FB for months that can't use Ocean ────
-  // Months where no production exists at the Ocean base ship-by date cannot
-  // use Ocean at all. Serve them first via FB/Air so their bucket inventory
-  // is reserved before Phase 1 Ocean claims it for later (free) months.
+  // ── PHASE 0 — Reserve Air/FB ONLY for months where Ocean is impossible ───
+  // A month needs Phase 0 only when ZERO production weeks exist before the
+  // Ocean lid ship-by date (the later of the two deadlines). If any production
+  // week exists in the Ocean window, Phase 1 should handle it — even if the
+  // snapshot at a single date looks low due to earlier bucket draws.
   if (ar) {
     const abPP = pal.airBasePP || 7500, alPP = pal.airLidPP || 25000;
     for (const d of demands) {
-      const ocBD = addDays(d.bDeadline, -(oc ? oc.transitDays : 45));
-      const ocA = availAt(ocBD);
-      const ocPals = Math.floor(ocA.bS / pal.basePP) + Math.floor(ocA.lS / pal.lidPP);
-      if (ocPals >= minContPal) continue; // Ocean can fill a container, skip Phase 0
+      // Use the LATER lid deadline — gives Ocean the maximum window
+      const ocLD = addDays(d.lDeadline, -(oc ? oc.transitDays : 45));
+      const anyOceanProd = prod.some(pw => pw.wk <= ocLD && (pw.bW > 0 || pw.lW > 0));
+      if (anyOceanProd) continue; // Production exists in Ocean window → Phase 1 handles it
 
       // Try FB first (cheaper than Air if enough volume)
       if (fb) {
@@ -216,25 +217,40 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
         }
       }
 
-      // Air for whatever FB couldn't cover
+      // Air for whatever FB couldn't cover — ship bases and lids independently
+      // because they have different lead times and Air doesn't require containers
       if (d.bNeed > 0 || d.lNeed > 0) {
         const bSD = addDays(d.bDeadline, -ar.transitDays);
         const lSD = addDays(d.lDeadline, -ar.transitDays);
-        const shipDate = bSD > lSD ? bSD : lSD;
-        const a = availAt(shipDate);
-        let bShip = Math.max(0, Math.min(d.bNeed, a.bS));
-        let lShip = Math.max(0, Math.min(d.lNeed, a.lS));
-        if (bShip > 0 && a.bS >= abPP) bShip = Math.min(Math.ceil(bShip / abPP) * abPP, a.bS);
-        if (lShip > 0 && a.lS >= alPP) lShip = Math.min(Math.ceil(lShip / alPP) * alPP, a.lS);
-        if (bShip + lShip > 0) {
-          res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: bShip, lQ: lShip, tQ: bShip + lShip,
-            cost: bShip * airCost.base + lShip * airCost.lid,
-            bSd: new Date(shipDate), lSd: new Date(shipDate),
-            bAr: addDays(shipDate, ar.transitDays), lAr: addDays(shipDate, ar.transitDays),
-            bPal: bShip > 0 ? Math.ceil(bShip / abPP) : 0,
-            lPal: lShip > 0 ? Math.ceil(lShip / alPP) : 0, preShip: false });
-          drawFrom(shipDate, bShip, lShip);
-          d.bNeed -= bShip; d.lNeed -= lShip;
+        // Ship bases on base deadline
+        if (d.bNeed > 0) {
+          const aB = availAt(bSD);
+          let bShip = Math.max(0, Math.min(d.bNeed, aB.bS));
+          if (bShip > 0 && aB.bS >= abPP) bShip = Math.min(Math.ceil(bShip / abPP) * abPP, aB.bS);
+          if (bShip > 0) {
+            res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: bShip, lQ: 0, tQ: bShip,
+              cost: bShip * airCost.base,
+              bSd: new Date(bSD), lSd: new Date(bSD),
+              bAr: addDays(bSD, ar.transitDays), lAr: addDays(bSD, ar.transitDays),
+              bPal: Math.ceil(bShip / abPP), lPal: 0, preShip: false });
+            drawFrom(bSD, bShip, 0);
+            d.bNeed -= bShip;
+          }
+        }
+        // Ship lids on lid deadline
+        if (d.lNeed > 0) {
+          const aL = availAt(lSD);
+          let lShip = Math.max(0, Math.min(d.lNeed, aL.lS));
+          if (lShip > 0 && aL.lS >= alPP) lShip = Math.min(Math.ceil(lShip / alPP) * alPP, aL.lS);
+          if (lShip > 0) {
+            res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: 0, lQ: lShip, tQ: lShip,
+              cost: lShip * airCost.lid,
+              bSd: new Date(lSD), lSd: new Date(lSD),
+              bAr: addDays(lSD, ar.transitDays), lAr: addDays(lSD, ar.transitDays),
+              bPal: 0, lPal: Math.ceil(lShip / alPP), preShip: false });
+            drawFrom(lSD, 0, lShip);
+            d.lNeed -= lShip;
+          }
         }
       }
     }
@@ -262,61 +278,6 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
       }
     }
 
-    // ── PHASE 1.5 — Consolidate sub-pallet lid residuals into free Ocean ──
-    // After Phase 1, container rounding leaves small lid residuals per month.
-    // Sum feasible ones and pre-ship in a single free Ocean container.
-    // Use the LATEST feasible ship-by date (most production available there).
-    {
-      const subPalletDemands = demands.filter(d => d.lNeed > 0 && d.lNeed < pal.lidPP);
-      if (subPalletDemands.length > 0) {
-        let feasibleDemands = [];
-        let latestShipBy = null;
-        for (const d of subPalletDemands) {
-          const ocLD = addDays(d.lDeadline, -oc.transitDays);
-          const hasProduction = prod.some(pw => pw.wk <= ocLD);
-          if (hasProduction) {
-            feasibleDemands.push(d);
-            if (!latestShipBy || ocLD > latestShipBy) latestShipBy = ocLD;
-          }
-        }
-        const totalLidResidual = feasibleDemands.reduce((a, d) => a + d.lNeed, 0);
-        if (totalLidResidual > 0 && latestShipBy) {
-          const lidPals = Math.ceil(totalLidResidual / pal.lidPP);
-          const lidQty = lidPals * pal.lidPP;
-          const validWeeks = prod.filter(pw => pw.wk <= latestShipBy);
-          let shipped = false;
-          for (let i = validWeeks.length - 1; i >= 0 && !shipped; i--) {
-            const shipDate = validWeeks[i].wk;
-            const a = availAt(shipDate);
-            if (a.lS < lidQty) continue;
-            for (const ckKey of ["20HC", "40HC"]) {
-              const ck = cont[ckKey];
-              const maxPal = ck.pallets;
-              const minPal = ck.minPal || (maxPal <= 10 ? 8 : 16);
-              if (lidPals > maxPal) continue;
-              const basePals = Math.min(maxPal - lidPals, Math.floor(a.bS / pal.basePP));
-              if (basePals + lidPals < minPal) continue;
-              const bQ = basePals * pal.basePP;
-              const arrDate = addDays(shipDate, oc.transitDays);
-              res.push({ mo: feasibleDemands[0].mo, meth: "Standard Ocean", cn: ck.label,
-                bQ, lQ: lidQty, tQ: bQ + lidQty, cost: 0,
-                bSd: new Date(shipDate), lSd: new Date(shipDate),
-                bAr: arrDate, lAr: arrDate, preShip: true, bPal: basePals, lPal: lidPals });
-              drawFrom(shipDate, bQ, lidQty);
-              let rem = lidQty;
-              for (const sd of feasibleDemands) {
-                const credit = Math.min(rem, sd.lNeed);
-                sd.lNeed -= credit; rem -= credit;
-                if (rem <= 0) break;
-              }
-              feasibleDemands[0].bNeed = Math.max(0, feasibleDemands[0].bNeed - bQ);
-              shipped = true;
-              break;
-            }
-          }
-        }
-      }
-    }
   }
 
   // ── PHASE 2 — Fast Boat lids (multi-week scan, cost-checked) ────
@@ -387,7 +348,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     }
   }
 
-  // ── PHASE 4 — Air (production-constrained, no phantom units) ────
+  // ── PHASE 4 — Air (production-constrained, independent base/lid deadlines) ──
   if (ar) {
     const abPP = pal.airBasePP || 7500, alPP = pal.airLidPP || 25000;
     for (const d of demands) {
@@ -396,24 +357,35 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
       if (d.bNeed <= 0 && d.lNeed <= 0) continue;
       const bSD = addDays(d.bDeadline, -ar.transitDays);
       const lSD = addDays(d.lDeadline, -ar.transitDays);
-      // Use the LATER date so both components exist when shipped
-      const shipDate = bSD > lSD ? bSD : lSD;
-      const a = availAt(shipDate);
-      // Cap to what's actually produced — no phantom units
-      let bShip = Math.max(0, Math.min(d.bNeed, a.bS));
-      let lShip = Math.max(0, Math.min(d.lNeed, a.lS));
-      // Round to air pallets only if production supports it
-      if (bShip > 0 && a.bS >= abPP) bShip = Math.min(Math.ceil(bShip / abPP) * abPP, a.bS);
-      if (lShip > 0 && a.lS >= alPP) lShip = Math.min(Math.ceil(lShip / alPP) * alPP, a.lS);
-      if (bShip + lShip > 0) {
-        res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: bShip, lQ: lShip, tQ: bShip + lShip,
-          cost: bShip * airCost.base + lShip * airCost.lid,
-          bSd: new Date(shipDate), lSd: new Date(shipDate),
-          bAr: addDays(shipDate, ar.transitDays), lAr: addDays(shipDate, ar.transitDays),
-          bPal: bShip > 0 ? Math.ceil(bShip / abPP) : 0,
-          lPal: lShip > 0 ? Math.ceil(lShip / alPP) : 0, preShip: false });
-        drawFrom(shipDate, bShip, lShip);
-        d.bNeed -= bShip; d.lNeed -= lShip;
+      // Ship bases on base deadline (arrives baseLeadDays before month)
+      if (d.bNeed > 0) {
+        const aB = availAt(bSD);
+        let bShip = Math.max(0, Math.min(d.bNeed, aB.bS));
+        if (bShip > 0 && aB.bS >= abPP) bShip = Math.min(Math.ceil(bShip / abPP) * abPP, aB.bS);
+        if (bShip > 0) {
+          res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: bShip, lQ: 0, tQ: bShip,
+            cost: bShip * airCost.base,
+            bSd: new Date(bSD), lSd: new Date(bSD),
+            bAr: addDays(bSD, ar.transitDays), lAr: addDays(bSD, ar.transitDays),
+            bPal: Math.ceil(bShip / abPP), lPal: 0, preShip: false });
+          drawFrom(bSD, bShip, 0);
+          d.bNeed -= bShip;
+        }
+      }
+      // Ship lids on lid deadline (arrives lidLeadDays before month)
+      if (d.lNeed > 0) {
+        const aL = availAt(lSD);
+        let lShip = Math.max(0, Math.min(d.lNeed, aL.lS));
+        if (lShip > 0 && aL.lS >= alPP) lShip = Math.min(Math.ceil(lShip / alPP) * alPP, aL.lS);
+        if (lShip > 0) {
+          res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: 0, lQ: lShip, tQ: lShip,
+            cost: lShip * airCost.lid,
+            bSd: new Date(lSD), lSd: new Date(lSD),
+            bAr: addDays(lSD, ar.transitDays), lAr: addDays(lSD, ar.transitDays),
+            bPal: 0, lPal: Math.ceil(lShip / alPP), preShip: false });
+          drawFrom(lSD, 0, lShip);
+          d.lNeed -= lShip;
+        }
       }
     }
   }
