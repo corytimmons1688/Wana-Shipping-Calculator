@@ -61,6 +61,6 @@ export const PKL = [{cont:"20' HC",item:"Wana Jar",pallets:8,qpc:72576,wt:"2,070
 
 const dc = o => JSON.parse(JSON.stringify(o));
 export function initScenario() {
-  return { markets:dc(MARKETS), shipping:dc(SHIPPING), molds:dc(MOLDS), containers:dc(CONTAINERS), params:dc(PARAMS), pallet:dc(PALLET), airCost:dc(AIR_COST), protoMolds:dc(PROTO_MOLDS), equipment:dc(EQUIPMENT), protoTL:dc(PROTO_TL), prodTL:dc(PROD_TL), forecast:dc(FORECAST), pkl:dc(PKL) };
+  return { markets:dc(MARKETS), shipping:dc(SHIPPING), molds:dc(MOLDS), containers:dc(CONTAINERS), params:dc(PARAMS), pallet:dc(PALLET), airCost:dc(AIR_COST), protoMolds:dc(PROTO_MOLDS), equipment:dc(EQUIPMENT), protoTL:dc(PROTO_TL), prodTL:dc(PROD_TL), forecast:dc(FORECAST), pkl:dc(PKL), shipEdits:[] };
 }
 export function mkScenario(name, base) { return { id: Date.now()+Math.random(), name, ...dc(base) }; }
