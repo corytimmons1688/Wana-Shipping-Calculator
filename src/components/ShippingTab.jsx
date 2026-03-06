@@ -310,7 +310,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
       });
     }
     return rows;
-  }, [prod, ships, gld, weeklyDem]);
+  }, [prod, ships, gld, weeklyDem, sc.shipEdits, sc.shipDeletions, sc.shipAdditions]);
 
   var hlBg = "#dbeafe";
 
