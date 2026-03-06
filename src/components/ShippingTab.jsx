@@ -19,20 +19,35 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
     var cumArrB = 0, cumArrL = 0;
     var cumDemand = 0, lastDemMonth = -1;
 
-    // REMOVED: dead code — shipByWeek was built but never used
-    // Map shipments by their ARRIVAL week for the unified inventory table
-    var arrByWeek = {};
+    // Map shipments by their SHIP date for the "Shipping Out" columns
+    var shipByWeek = {};
     for (var si = 0; si < ships.length; si++) {
       var sh = ships[si];
-      var aw = sh.bAr ? sh.bAr.getTime() : 0;
-      var bestWk = null, bestDist = Infinity;
+      var sd = sh.bSd ? sh.bSd.getTime() : 0;
+      var bestShipWk = null, bestShipDist = Infinity;
       for (var pi = 0; pi < prod.length; pi++) {
-        var dist = Math.abs(prod[pi].wk.getTime() - aw);
-        if (dist < bestDist) { bestDist = dist; bestWk = prod[pi].wk.getTime(); }
+        var dist = Math.abs(prod[pi].wk.getTime() - sd);
+        if (dist < bestShipDist) { bestShipDist = dist; bestShipWk = prod[pi].wk.getTime(); }
       }
-      if (bestWk !== null) {
-        if (!arrByWeek[bestWk]) arrByWeek[bestWk] = [];
-        arrByWeek[bestWk].push(sh);
+      if (bestShipWk !== null) {
+        if (!shipByWeek[bestShipWk]) shipByWeek[bestShipWk] = [];
+        shipByWeek[bestShipWk].push(sh);
+      }
+    }
+
+    // Map shipments by their ARRIVAL date for the inventory columns
+    var arrByWeek = {};
+    for (var si2 = 0; si2 < ships.length; si2++) {
+      var sh2 = ships[si2];
+      var aw = sh2.bAr ? sh2.bAr.getTime() : 0;
+      var bestArrWk = null, bestArrDist = Infinity;
+      for (var pi2 = 0; pi2 < prod.length; pi2++) {
+        var dist2 = Math.abs(prod[pi2].wk.getTime() - aw);
+        if (dist2 < bestArrDist) { bestArrDist = dist2; bestArrWk = prod[pi2].wk.getTime(); }
+      }
+      if (bestArrWk !== null) {
+        if (!arrByWeek[bestArrWk]) arrByWeek[bestArrWk] = [];
+        arrByWeek[bestArrWk].push(sh2);
       }
     }
 
@@ -41,14 +56,15 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
       if (w.bC === 0 && w.lC === 0 && w.bW === 0 && w.lW === 0) continue;
       var wt = w.wk.getTime();
 
-      // FIXED: correctly named — these are shipments that ARRIVE this week
+      // Shipments DEPARTING this week (for Shipping Out columns)
+      var departures = shipByWeek[wt] || [];
+
+      // Shipments ARRIVING this week (for inventory columns)
       var arrivals = arrByWeek[wt] || [];
       var arrB = 0, arrL = 0;
       for (var ai = 0; ai < arrivals.length; ai++) { arrB += arrivals[ai].bQ; arrL += arrivals[ai].lQ; }
       cumArrB += arrB; cumArrL += arrL;
 
-      // FIXED: wkMonth declared at function scope (not inside else branch)
-      // so it is always available for the Months-of-Stock calculation below
       var wkMonth = w.wk.getMonth();
 
       var weekDemand = 0;
@@ -74,7 +90,6 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
       var stockB = cumArrB - cumDemand;
       var stockL = cumArrL - cumDemand;
 
-      // FIXED: wkMonth is now always defined (moved above the if/else block)
       var mosVal = 0;
       if (stockOnHand > 0 && wkMonth < 12) {
         var remStock = stockOnHand;
@@ -88,7 +103,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
 
       rows.push({
         wk: w.wk, bW: w.bW, lW: w.lW, bC: w.bC, lC: w.lC,
-        arrivals: arrivals,
+        departures: departures, arrivals: arrivals,
         arrB: arrB, arrL: arrL, cumArrB: cumArrB, cumArrL: cumArrL,
         cumArrived: cumArrived, monthDemand: monthDemand,
         cumDemand: cumDemand, stockOnHand: stockOnHand, stockB: stockB, stockL: stockL,
@@ -134,7 +149,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
             <thead>
               <tr>
                 <th style={{ ...th, top:0, zIndex:3 }} rowSpan={2}>Week Of</th>
-                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.GR, color:T.GR, top:0, zIndex:3 }} colSpan={4}>Production</th>
+                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.GR, color:T.GR, top:0, zIndex:3, borderRight:"3px solid "+T.AC }} colSpan={4}>Production</th>
                 <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC, top:0, zIndex:3 }} colSpan={5}>Shipping Out <span style={{fontSize:9,opacity:0.6}}>(↑ departs · ↓ arrives)</span></th>
                 <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AM, color:T.AM, top:0, zIndex:3, borderLeft:"3px solid "+T.AM }} colSpan={7}>Inventory at Calyx</th>
               </tr>
@@ -142,7 +157,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Wk</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Wk</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Cum</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Cum</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2, borderRight:"3px solid "+T.AC }}>Lid Cum</th>
                 <th style={{ ...th, textAlign:"left", fontSize:9, top:28, zIndex:2 }}>Method</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Bases</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lids</th>
@@ -159,24 +174,24 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
             </thead>
             <tbody>
               {unified.map(function(r, i) {
-                var firstArr = r.arrivals.length > 0 ? r.arrivals[0] : null;
-                var extraArrs = r.arrivals.length > 1 ? r.arrivals.slice(1) : [];
+                var firstDep = r.departures.length > 0 ? r.departures[0] : null;
+                var extraDeps = r.departures.length > 1 ? r.departures.slice(1) : [];
                 var isHl = hl === "u"+i;
                 var rowBg = isHl ? hlBg : (i%2===0 ? "transparent" : T.S2);
+                var prodBorderR = "3px solid "+T.AC;
 
                 var mainRow = (
-                  // FIXED: stale closure on 'hl' — use functional updater pattern
                   <tr key={"m"+i} onClick={function() { setHl(function(cur) { return cur === "u"+i ? null : "u"+i; }); }} style={{ background: rowBg, cursor:"pointer", transition:"background 0.1s" }}>
                     <td style={td}>{dFS(r.wk)}</td>
                     <td style={{ ...td, textAlign:"right", color:r.bW>0?T.GR:T.T2 }}>{r.bW>0?fm(r.bW):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.lW>0?T.AC:T.T2 }}>{r.lW>0?fm(r.lW):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.GR, fontSize:11 }}>{r.bC>0?fm(r.bC):""}</td>
-                    <td style={{ ...td, textAlign:"right", color:T.AC, fontSize:11 }}>{r.lC>0?fm(r.lC):""}</td>
-                    <td style={td}>{firstArr ? <Bg method={firstArr.meth}/> : ""}</td>
-                    <td style={{ ...td, textAlign:"right", fontWeight:firstArr?600:400, color:T.GR }}>{firstArr && firstArr.bQ > 0 ? fm(firstArr.bQ) : ""}</td>
-                    <td style={{ ...td, textAlign:"right", fontWeight:firstArr?600:400, color:T.AC }}>{firstArr && firstArr.lQ > 0 ? fm(firstArr.lQ) : ""}</td>
-                    <td style={{ ...td, textAlign:"right", color:firstArr&&firstArr.cost>0?T.AM:T.GR, fontWeight:firstArr?600:400 }}>{firstArr ? (firstArr.cost===0?"FREE":f$(firstArr.cost)) : ""}</td>
-                    <td style={{ ...td, color:T.T2, fontSize:11, lineHeight:"1.5" }}>{firstArr ? <span style={{display:"flex",flexDirection:"column",gap:1}}><span style={{color:T.T3}}>↑ {dFS(firstArr.bSd)}</span><span style={{color:T.AC}}>↓ {dFS(firstArr.bAr)}</span></span> : ""}</td>
+                    <td style={{ ...td, textAlign:"right", color:T.AC, fontSize:11, borderRight:prodBorderR }}>{r.lC>0?fm(r.lC):""}</td>
+                    <td style={td}>{firstDep ? <Bg method={firstDep.meth}/> : ""}</td>
+                    <td style={{ ...td, textAlign:"right", fontWeight:firstDep?600:400, color:T.GR }}>{firstDep && firstDep.bQ > 0 ? fm(firstDep.bQ) : ""}</td>
+                    <td style={{ ...td, textAlign:"right", fontWeight:firstDep?600:400, color:T.AC }}>{firstDep && firstDep.lQ > 0 ? fm(firstDep.lQ) : ""}</td>
+                    <td style={{ ...td, textAlign:"right", color:firstDep&&firstDep.cost>0?T.AM:T.GR, fontWeight:firstDep?600:400 }}>{firstDep ? (firstDep.cost===0?"FREE":f$(firstDep.cost)) : ""}</td>
+                    <td style={{ ...td, color:T.T2, fontSize:11, lineHeight:"1.5" }}>{firstDep ? <span style={{display:"flex",flexDirection:"column",gap:1}}><span style={{color:T.T3}}>{"↑ "}{dFS(firstDep.bSd)}</span><span style={{color:T.AC}}>{"↓ "}{dFS(firstDep.bAr)}</span></span> : ""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.GR, fontWeight:r.arrB>0?600:400, borderLeft:"3px solid "+T.AM }}>{r.arrB>0?fm(r.arrB):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.AC, fontWeight:r.arrL>0?600:400 }}>{r.arrL>0?fm(r.arrL):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.monthDemand>0?"#9333ea":T.T2 }}>{r.monthDemand>0?fm(r.monthDemand):""}</td>
@@ -187,17 +202,15 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
                   </tr>
                 );
 
-                var subRows = extraArrs.map(function(ea, si) {
+                var subRows = extraDeps.map(function(ea, si) {
                   return (
-                    // FIXED: functional updater here too
                     <tr key={"s"+i+"-"+si} onClick={function() { setHl(function(cur) { return cur === "u"+i ? null : "u"+i; }); }} style={{ background: isHl ? hlBg : (i%2===0?"transparent":T.S2), cursor:"pointer" }}>
-                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
+                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={{ ...td, borderRight:prodBorderR }}></td>
                       <td style={td}><Bg method={ea.meth}/></td>
                       <td style={{ ...td, textAlign:"right", fontWeight:600, color:T.GR }}>{ea.bQ > 0 ? fm(ea.bQ) : ""}</td>
                       <td style={{ ...td, textAlign:"right", fontWeight:600, color:T.AC }}>{ea.lQ > 0 ? fm(ea.lQ) : ""}</td>
                       <td style={{ ...td, textAlign:"right", color:ea.cost>0?T.AM:T.GR, fontWeight:600 }}>{ea.cost===0?"FREE":f$(ea.cost)}</td>
-                      {/* show departure + arrival dates */}
-                      <td style={{ ...td, color:T.T2, fontSize:11, lineHeight:"1.5" }}><span style={{display:"flex",flexDirection:"column",gap:1}}><span style={{color:T.T3}}>↑ {dFS(ea.bSd)}</span><span style={{color:T.AC}}>↓ {dFS(ea.bAr)}</span></span></td>
+                      <td style={{ ...td, color:T.T2, fontSize:11, lineHeight:"1.5" }}><span style={{display:"flex",flexDirection:"column",gap:1}}><span style={{color:T.T3}}>{"↑ "}{dFS(ea.bSd)}</span><span style={{color:T.AC}}>{"↓ "}{dFS(ea.bAr)}</span></span></td>
                       <td style={{ ...td, borderLeft:"3px solid "+T.AM }}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
                     </tr>
                   );
