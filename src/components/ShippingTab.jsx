@@ -136,6 +136,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
   function isEdited(idx) {
     return sc.shipEdits && sc.shipEdits.some(function(e) { return e.idx === idx; });
   }
+
+  var unified = useMemo(function() {
     if (!prod || !ships || !gld) return [];
     var rows = [];
     var cumArrB = 0, cumArrL = 0;
