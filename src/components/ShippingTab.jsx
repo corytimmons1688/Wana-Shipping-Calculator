@@ -135,6 +135,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
       }
     }
 
+    var cumShippedB = 0, cumShippedL = 0;
+
     for (var wi = 0; wi < prod.length; wi++) {
       var w = prod[wi];
       if (w.bC === 0 && w.lC === 0 && w.bW === 0 && w.lW === 0) continue;
@@ -142,6 +144,15 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
 
       // Shipments DEPARTING this week (for Shipping Out columns)
       var departures = shipByWeek[wt] || [];
+
+      // On-hand at factory BEFORE this week's shipments depart
+      var onHandB = w.bC - cumShippedB;
+      var onHandL = w.lC - cumShippedL;
+
+      // Now add this week's departures to cumulative shipped
+      var depB = 0, depL = 0;
+      for (var di = 0; di < departures.length; di++) { depB += departures[di].bQ; depL += departures[di].lQ; }
+      cumShippedB += depB; cumShippedL += depL;
 
       // Shipments ARRIVING this week (for inventory columns)
       var arrivals = arrByWeek[wt] || [];
@@ -187,6 +198,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
 
       rows.push({
         wk: w.wk, bW: w.bW, lW: w.lW, bC: w.bC, lC: w.lC,
+        onHandB: onHandB, onHandL: onHandL,
         departures: departures, arrivals: arrivals,
         arrB: arrB, arrL: arrL, cumArrB: cumArrB, cumArrL: cumArrL,
         cumArrived: cumArrived, monthDemand: monthDemand,
@@ -261,7 +273,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
             <thead>
               <tr>
                 <th style={{ ...th, top:0, zIndex:3 }} rowSpan={2}>Week Of</th>
-                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.GR, color:T.GR, top:0, zIndex:3, borderRight:"3px solid "+T.AC }} colSpan={4}>Production</th>
+                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.GR, color:T.GR, top:0, zIndex:3, borderRight:"3px solid "+T.AC }} colSpan={6}>Production</th>
                 <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC, top:0, zIndex:3 }} colSpan={5}>Shipping Out <span style={{fontSize:9,opacity:0.6}}>(↑ departs · ↓ arrives)</span></th>
                 <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AM, color:T.AM, top:0, zIndex:3, borderLeft:"3px solid "+T.AM }} colSpan={7}>Inventory at Calyx</th>
               </tr>
@@ -269,7 +281,9 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Wk</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Wk</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Cumulative</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2, borderRight:"3px solid "+T.AC }}>Lid Cumulative</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Cumulative</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2, background:"#f0fdf4" }}>Base OH</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2, background:"#eff6ff", borderRight:"3px solid "+T.AC }}>Lid OH</th>
                 <th style={{ ...th, textAlign:"left", fontSize:9, top:28, zIndex:2 }}>Method</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Bases</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lids</th>
@@ -298,7 +312,9 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
                     <td style={{ ...td, textAlign:"right", color:r.bW>0?T.GR:T.T2 }}>{r.bW>0?fm(r.bW):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.lW>0?T.AC:T.T2 }}>{r.lW>0?fm(r.lW):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.GR, fontSize:11 }}>{r.bC>0?fm(r.bC):""}</td>
-                    <td style={{ ...td, textAlign:"right", color:T.AC, fontSize:11, borderRight:prodBorderR }}>{r.lC>0?fm(r.lC):""}</td>
+                    <td style={{ ...td, textAlign:"right", color:T.AC, fontSize:11 }}>{r.lC>0?fm(r.lC):""}</td>
+                    <td style={{ ...td, textAlign:"right", color:T.GR, fontWeight:600, background:"#f0fdf408" }}>{r.onHandB>0?fm(r.onHandB):""}</td>
+                    <td style={{ ...td, textAlign:"right", color:T.AC, fontWeight:600, background:"#eff6ff08", borderRight:prodBorderR }}>{r.onHandL>0?fm(r.onHandL):""}</td>
                     <td style={td}>{firstDep ? <Bg method={firstDep.meth}/> : ""}</td>
                     <td style={{ ...td, textAlign:"right", fontWeight:firstDep?600:400, color:T.GR }}>{firstDep && firstDep.bQ > 0 ? fm(firstDep.bQ) : ""}</td>
                     <td style={{ ...td, textAlign:"right", fontWeight:firstDep?600:400, color:T.AC }}>{firstDep && firstDep.lQ > 0 ? fm(firstDep.lQ) : ""}</td>
@@ -317,7 +333,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
                 var subRows = extraDeps.map(function(ea, si) {
                   return (
                     <tr key={"s"+i+"-"+si} onClick={function() { setHl(function(cur) { return cur === "u"+i ? null : "u"+i; }); }} style={{ background: isHl ? hlBg : (i%2===0?"transparent":T.S2), cursor:"pointer" }}>
-                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={{ ...td, borderRight:prodBorderR }}></td>
+                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={{ ...td, borderRight:prodBorderR }}></td>
                       <td style={td}><Bg method={ea.meth}/></td>
                       <td style={{ ...td, textAlign:"right", fontWeight:600, color:T.GR }}>{ea.bQ > 0 ? fm(ea.bQ) : ""}</td>
                       <td style={{ ...td, textAlign:"right", fontWeight:600, color:T.AC }}>{ea.lQ > 0 ? fm(ea.lQ) : ""}</td>
