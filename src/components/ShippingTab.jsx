@@ -8,7 +8,7 @@ import { optimize as runOptimize, calcGLD } from "../utils/calc";
 // FIXED: safe date formatter - returns "—" for null/undefined instead of crashing
 function dFS(d) { return d ? dF(d) : "\u2014"; }
 
-export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd, updShipEdit, addShipment, updShipAddition, removeShipAddition, clearShipEdits, hasShipEdits }) {
+export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd, updShipEdit, addShipment, updShipAddition, removeShipAddition, deleteShipment, restoreShipment, clearShipEdits, hasShipEdits }) {
   var svState = useState("unified");
   var sv = svState[0], setSv = svState[1];
   var hlState = useState(null);
@@ -187,6 +187,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
     var shipByWeek = {};
     for (var si = 0; si < ships.length; si++) {
       var sh = ships[si];
+      var origIdx = sh.origIdx !== undefined ? sh.origIdx : si;
       var sd = sh.bSd ? sh.bSd.getTime() : 0;
       var bestShipWk = null, bestShipDist = Infinity;
       for (var pi = 0; pi < prod.length; pi++) {
@@ -195,7 +196,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
       }
       if (bestShipWk !== null) {
         if (!shipByWeek[bestShipWk]) shipByWeek[bestShipWk] = [];
-        shipByWeek[bestShipWk].push({ sh: sh, idx: si });
+        shipByWeek[bestShipWk].push({ sh: sh, idx: origIdx });
       }
     }
 
@@ -497,6 +498,11 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                           <button onClick={function(e){e.stopPropagation(); removeShipAddition(dep.addId);}}
                             title="Remove this manual shipment"
                             style={{marginLeft:4,background:"none",border:"1px solid #dc2626",borderRadius:3,color:"#dc2626",fontSize:9,padding:"0 4px",cursor:"pointer",lineHeight:"14px",fontFamily:"inherit"}}>✕</button>
+                        )}
+                        {!isAdditionEntry && (
+                          <button onClick={function(e){e.stopPropagation(); deleteShipment(depIdx);}}
+                            title="Delete this shipment"
+                            style={{marginLeft:4,background:"none",border:"1px solid #dc2626",borderRadius:3,color:"#dc2626",fontSize:9,padding:"0 4px",cursor:"pointer",lineHeight:"14px",fontFamily:"inherit"}}>🗑</button>
                         )}
                       </td>
                     );
