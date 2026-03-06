@@ -15,11 +15,14 @@ export default function SettingsTab({ sc, cap, upd }) {
 
   function moldPanel({ label, type, color, icon }) {
     const m = sc.molds[type];
+    const phases = ["proto"];
+    if (m.proto2) phases.push("proto2");
+    phases.push("prod");
     return (
       <div style={{ flex: "1 1 280px", minWidth: 280, background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD }}>
         <div style={{ fontSize: 13, fontWeight: 700, color, marginBottom: 8 }}>{icon} {label}</div>
-        {["proto", "prod"].map(ph => {
-          const d = m[ph]; const pL = ph === "proto" ? "Prototype" : "Production"; const wk = d.daily * d.qty * d.days;
+        {phases.map(ph => {
+          const d = m[ph]; const pL = ph === "proto" ? "Prototype #1" : ph === "proto2" ? "Prototype #2" : "Production"; const wk = d.daily * d.qty * d.days;
           return (
             <div key={ph} style={{ marginBottom: 8, padding: 9, background: T.BG, borderRadius: 5 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: T.T2, marginBottom: 5, textTransform: "uppercase" }}>{pL} {"\u2014"} {d.mat}</div>
