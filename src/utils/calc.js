@@ -94,6 +94,8 @@ function packOne(bAvail, lAvail, maxPal, minPal, bPP, lPP) {
 
 export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   const gld = calcGLD(mkts), prod = calcProd(molds), res = [];
+  // Air pallet sizes — used in Phases 0, 2, 3, 4 for cost comparisons
+  const abPP = pal.airBasePP || 7500, alPP = pal.airLidPP || 25000;
 
   let oc = null, fb = null, ar = null;
   for (const s of ship) {
@@ -191,7 +193,6 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   // week exists in the Ocean window, Phase 1 should handle it — even if the
   // snapshot at a single date looks low due to earlier bucket draws.
   if (ar) {
-    const abPP = pal.airBasePP || 7500, alPP = pal.airLidPP || 25000;
     for (const d of demands) {
       // Use the LATER lid deadline — gives Ocean the maximum window
       const ocLD = addDays(d.lDeadline, -(oc ? oc.transitDays : 45));
@@ -364,7 +365,6 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
 
   // ── PHASE 4 — Air (production-constrained, independent base/lid deadlines) ──
   if (ar) {
-    const abPP = pal.airBasePP || 7500, alPP = pal.airLidPP || 25000;
     for (const d of demands) {
       if (d.bNeed < 0) d.bNeed = 0;
       if (d.lNeed < 0) d.lNeed = 0;
