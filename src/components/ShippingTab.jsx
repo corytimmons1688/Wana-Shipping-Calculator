@@ -8,16 +8,27 @@ import { optimize as runOptimize, calcGLD } from "../utils/calc";
 // FIXED: safe date formatter - returns "—" for null/undefined instead of crashing
 function dFS(d) { return d ? dF(d) : "\u2014"; }
 
-export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd, updShipEdit, clearShipEdits, hasShipEdits }) {
+export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd, updShipEdit, addShipment, updShipAddition, removeShipAddition, clearShipEdits, hasShipEdits }) {
   var svState = useState("unified");
   var sv = svState[0], setSv = svState[1];
   var hlState = useState(null);
   var hl = hlState[0], setHl = hlState[1];
   var optState = useState(null); // null | "running" | {saved, original}
   var optStatus = optState[0], setOptStatus = optState[1];
-  // Inline editing — which cell is open: { idx, field } | null
+  // Inline editing state for existing shipments: { idx, field } | null
   var editingState = useState(null);
   var editing = editingState[0], setEditing = editingState[1];
+  // Inline add-row state: { wkMs, mo } | null
+  var addingState = useState(null);
+  var adding = addingState[0], setAdding = addingState[1];
+  var newMethState = useState("Standard Ocean");
+  var newMeth = newMethState[0], setNewMeth = newMethState[1];
+  var newBQState = useState("0");
+  var newBQ = newBQState[0], setNewBQ = newBQState[1];
+  var newLQState = useState("0");
+  var newLQ = newLQState[0], setNewLQ = newLQState[1];
+  var newMoState = useState(4);
+  var newMo = newMoState[0], setNewMo = newMoState[1];
 
   var doOptimize = useCallback(function() {
     if (!sc) return;
@@ -100,9 +111,6 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
     }, 50);
   }, [sc, upd]);
 
-  // Inline editing — which cell is open: { idx, field } | null
-  var editingState = useState(null);
-  var editing = editingState[0], setEditing = editingState[1];
   // Use a ref for the live input value so commitEdit always reads the latest
   // value regardless of which render closure fires onBlur/onKeyDown.
   var editValRef = useRef("");
@@ -141,7 +149,29 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
     if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
   }
 
-  // Check if a shipment has manual edits
+  // Open the "add new shipment" inline form for a given week row
+  function openAdd(wkMs, mo) {
+    setEditing(null);
+    setNewMeth("Standard Ocean");
+    setNewBQ("0");
+    setNewLQ("0");
+    setNewMo(mo);
+    setAdding({ wkMs: wkMs, mo: mo });
+  }
+
+  function confirmAdd() {
+    if (!adding) return;
+    var bNum = parseInt(newBQ.replace(/,/g, ""), 10) || 0;
+    var lNum = parseInt(newLQ.replace(/,/g, ""), 10) || 0;
+    if (bNum > 0 || lNum > 0) {
+      addShipment(adding.wkMs, newMo, newMeth, bNum, lNum);
+    }
+    setAdding(null);
+  }
+
+  function cancelAdd() { setAdding(null); }
+
+  // Check if a shipment has manual edits (for optimizer-generated ships only)
   function isEdited(idx) {
     return sc.shipEdits && sc.shipEdits.some(function(e) { return e.idx === idx; });
   }
@@ -391,10 +421,50 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                 var prodBorderR = "3px solid "+T.AC;
 
                 // Build editable cells for a departure entry {sh, idx}
+                // For entries with isAddition=true, show a delete button instead of edit marker
                 function makeDepCells(entry, isFirst) {
                   if (!entry) {
+                    // Empty shipping columns — show a faint "+ Add" button in the method cell
+                    var wkMs = r.wk.getTime();
+                    var wkMo = r.wk.getMonth();
+                    var isAddingThis = adding && adding.wkMs === wkMs;
+                    if (isAddingThis) {
+                      // Inline new-shipment form spanning the 5 shipping cells
+                      return [
+                        <td key="m" style={{...td}} onClick={function(e){e.stopPropagation();}}>
+                          <select value={newMeth} onChange={function(e){setNewMeth(e.target.value);}}
+                            style={{fontFamily:"inherit",fontSize:11,padding:"2px 4px",border:"1px solid "+T.AC,borderRadius:4,background:"#fff",width:120}}>
+                            {METHODS.map(function(m){return <option key={m} value={m}>{m}</option>;})}
+                          </select>
+                        </td>,
+                        <td key="mo" style={{...td}} onClick={function(e){e.stopPropagation();}}>
+                          <select value={newMo} onChange={function(e){setNewMo(parseInt(e.target.value,10));}}
+                            style={{fontFamily:"inherit",fontSize:11,padding:"2px 4px",border:"1px solid "+T.PU,borderRadius:4,background:"#fff",width:60}}>
+                            {MO.map(function(m,mi){return <option key={mi} value={mi}>{m}</option>;})}
+                          </select>
+                        </td>,
+                        <td key="b" style={{...td,textAlign:"right"}} onClick={function(e){e.stopPropagation();}}>
+                          <input type="text" value={newBQ} onChange={function(e){setNewBQ(e.target.value);}}
+                            style={{width:70,textAlign:"right",fontFamily:"inherit",fontSize:12,padding:"1px 4px",border:"1px solid "+T.GR,borderRadius:4}}/>
+                        </td>,
+                        <td key="l" style={{...td,textAlign:"right"}} onClick={function(e){e.stopPropagation();}}>
+                          <input type="text" value={newLQ} onChange={function(e){setNewLQ(e.target.value);}}
+                            style={{width:70,textAlign:"right",fontFamily:"inherit",fontSize:12,padding:"1px 4px",border:"1px solid "+T.AC,borderRadius:4}}/>
+                        </td>,
+                        <td key="t" style={{...td}} onClick={function(e){e.stopPropagation();}}>
+                          <span style={{display:"flex",gap:4}}>
+                            <button onClick={confirmAdd} style={{background:T.GR,border:"none",borderRadius:4,color:"#fff",fontSize:10,fontWeight:700,padding:"2px 7px",cursor:"pointer",fontFamily:"inherit"}}>✓</button>
+                            <button onClick={cancelAdd} style={{background:"none",border:"1px solid "+T.BD,borderRadius:4,color:T.T2,fontSize:10,padding:"2px 7px",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+                          </span>
+                        </td>
+                      ];
+                    }
                     return [
-                      <td key="m" style={td}></td>,
+                      <td key="m" style={{...td}}>
+                        <button onClick={function(e){e.stopPropagation(); openAdd(wkMs, wkMo);}}
+                          style={{background:"none",border:"1px dashed "+T.BD,borderRadius:4,color:T.T2,fontSize:10,padding:"1px 7px",cursor:"pointer",fontFamily:"inherit",opacity:0.6}}
+                          title="Add a shipment this week">+ Add</button>
+                      </td>,
                       <td key="b" style={{ ...td, textAlign:"right" }}></td>,
                       <td key="l" style={{ ...td, textAlign:"right" }}></td>,
                       <td key="c" style={{ ...td, textAlign:"right" }}></td>,
@@ -402,10 +472,11 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                     ];
                   }
                   var dep = entry.sh, depIdx = entry.idx;
-                  var edited = isEdited(depIdx);
+                  var isAdditionEntry = dep.isAddition;
+                  var edited = !isAdditionEntry && isEdited(depIdx);
                   // Method cell
                   var methTd;
-                  if (editing && editing.idx === depIdx && editing.field === "meth") {
+                  if (!isAdditionEntry && editing && editing.idx === depIdx && editing.field === "meth") {
                     methTd = (
                       <td key="m" style={td} onClick={function(e){e.stopPropagation();}}>
                         <select autoFocus value={editValRef.current}
@@ -418,15 +489,21 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                     );
                   } else {
                     methTd = (
-                      <td key="m" style={{...td, cursor:"pointer"}} onClick={function(e){e.stopPropagation(); startEdit(depIdx,"meth",dep.meth);}}>
+                      <td key="m" style={{...td, cursor: isAdditionEntry ? "default" : "pointer"}}
+                        onClick={isAdditionEntry ? undefined : function(e){e.stopPropagation(); startEdit(depIdx,"meth",dep.meth);}}>
                         <Bg method={dep.meth}/>
                         {edited && <span style={{marginLeft:3,fontSize:8,color:T.AM,fontWeight:700}}>✎</span>}
+                        {isAdditionEntry && (
+                          <button onClick={function(e){e.stopPropagation(); removeShipAddition(dep.addId);}}
+                            title="Remove this manual shipment"
+                            style={{marginLeft:4,background:"none",border:"1px solid #dc2626",borderRadius:3,color:"#dc2626",fontSize:9,padding:"0 4px",cursor:"pointer",lineHeight:"14px",fontFamily:"inherit"}}>✕</button>
+                        )}
                       </td>
                     );
                   }
                   // Bases cell
                   var bTd;
-                  if (editing && editing.idx === depIdx && editing.field === "bQ") {
+                  if (!isAdditionEntry && editing && editing.idx === depIdx && editing.field === "bQ") {
                     bTd = (
                       <td key="b" style={{...td,textAlign:"right"}} onClick={function(e){e.stopPropagation();}}>
                         <input autoFocus type="text" defaultValue={String(dep.bQ)}
@@ -437,16 +514,16 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                     );
                   } else {
                     bTd = (
-                      <td key="b" style={{...td,textAlign:"right",color:T.GR,fontWeight:600,cursor:"pointer"}}
-                        onClick={function(e){e.stopPropagation(); startEdit(depIdx,"bQ",dep.bQ);}}
-                        title="Click to edit bases">
+                      <td key="b" style={{...td,textAlign:"right",color:T.GR,fontWeight:600,cursor:isAdditionEntry?"default":"pointer"}}
+                        onClick={isAdditionEntry ? undefined : function(e){e.stopPropagation(); startEdit(depIdx,"bQ",dep.bQ);}}
+                        title={isAdditionEntry ? "" : "Click to edit bases"}>
                         {dep.bQ > 0 ? fm(dep.bQ) : ""}
                       </td>
                     );
                   }
                   // Lids cell
                   var lTd;
-                  if (editing && editing.idx === depIdx && editing.field === "lQ") {
+                  if (!isAdditionEntry && editing && editing.idx === depIdx && editing.field === "lQ") {
                     lTd = (
                       <td key="l" style={{...td,textAlign:"right"}} onClick={function(e){e.stopPropagation();}}>
                         <input autoFocus type="text" defaultValue={String(dep.lQ)}
@@ -457,9 +534,9 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                     );
                   } else {
                     lTd = (
-                      <td key="l" style={{...td,textAlign:"right",color:T.AC,fontWeight:600,cursor:"pointer"}}
-                        onClick={function(e){e.stopPropagation(); startEdit(depIdx,"lQ",dep.lQ);}}
-                        title="Click to edit lids">
+                      <td key="l" style={{...td,textAlign:"right",color:T.AC,fontWeight:600,cursor:isAdditionEntry?"default":"pointer"}}
+                        onClick={isAdditionEntry ? undefined : function(e){e.stopPropagation(); startEdit(depIdx,"lQ",dep.lQ);}}
+                        title={isAdditionEntry ? "" : "Click to edit lids"}>
                         {dep.lQ > 0 ? fm(dep.lQ) : ""}
                       </td>
                     );
@@ -508,7 +585,60 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                   );
                 });
 
-                return [mainRow].concat(subRows);
+                // When there's already a shipment and we're adding another to this week, show a form row at the end
+                var wkMs2 = r.wk.getTime();
+                var isAddingHere = adding && adding.wkMs === wkMs2 && firstDepEntry !== null;
+                var addExtraRow = null;
+                if (firstDepEntry !== null && !isAddingHere) {
+                  addExtraRow = (
+                    <tr key={"add"+i} style={{ background: i%2===0?"transparent":T.S2 }}>
+                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={{ ...td, borderRight:prodBorderR }}></td>
+                      <td style={{...td}} colSpan={5}>
+                        <button onClick={function(e){e.stopPropagation(); openAdd(wkMs2, r.wk.getMonth());}}
+                          style={{background:"none",border:"1px dashed "+T.BD,borderRadius:4,color:T.T2,fontSize:10,padding:"1px 7px",cursor:"pointer",fontFamily:"inherit",opacity:0.5}}
+                          title="Add another shipment this week">+ Add</button>
+                      </td>
+                      <td style={{ ...td, borderLeft:"3px solid "+T.AM }}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
+                    </tr>
+                  );
+                } else if (firstDepEntry !== null && isAddingHere) {
+                  addExtraRow = (
+                    <tr key={"add"+i} style={{ background: i%2===0?"transparent":T.S2 }}>
+                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={{ ...td, borderRight:prodBorderR }}></td>
+                      <td style={{...td}} onClick={function(e){e.stopPropagation();}}>
+                        <select value={newMeth} onChange={function(e){setNewMeth(e.target.value);}}
+                          style={{fontFamily:"inherit",fontSize:11,padding:"2px 4px",border:"1px solid "+T.AC,borderRadius:4,background:"#fff",width:120}}>
+                          {METHODS.map(function(m){return <option key={m} value={m}>{m}</option>;})}
+                        </select>
+                      </td>
+                      <td style={{...td}} onClick={function(e){e.stopPropagation();}}>
+                        <select value={newMo} onChange={function(e){setNewMo(parseInt(e.target.value,10));}}
+                          style={{fontFamily:"inherit",fontSize:11,padding:"2px 4px",border:"1px solid "+T.PU,borderRadius:4,background:"#fff",width:60}}>
+                          {MO.map(function(m,mi){return <option key={mi} value={mi}>{m}</option>;})}
+                        </select>
+                      </td>
+                      <td style={{...td,textAlign:"right"}} onClick={function(e){e.stopPropagation();}}>
+                        <input autoFocus type="text" value={newBQ} onChange={function(e){setNewBQ(e.target.value);}}
+                          style={{width:70,textAlign:"right",fontFamily:"inherit",fontSize:12,padding:"1px 4px",border:"1px solid "+T.GR,borderRadius:4}}/>
+                      </td>
+                      <td style={{...td,textAlign:"right"}} onClick={function(e){e.stopPropagation();}}>
+                        <input type="text" value={newLQ} onChange={function(e){setNewLQ(e.target.value);}}
+                          style={{width:70,textAlign:"right",fontFamily:"inherit",fontSize:12,padding:"1px 4px",border:"1px solid "+T.AC,borderRadius:4}}/>
+                      </td>
+                      <td style={{...td}} onClick={function(e){e.stopPropagation();}}>
+                        <span style={{display:"flex",gap:4}}>
+                          <button onClick={confirmAdd} style={{background:T.GR,border:"none",borderRadius:4,color:"#fff",fontSize:10,fontWeight:700,padding:"2px 7px",cursor:"pointer",fontFamily:"inherit"}}>✓</button>
+                          <button onClick={cancelAdd} style={{background:"none",border:"1px solid "+T.BD,borderRadius:4,color:T.T2,fontSize:10,padding:"2px 7px",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+                        </span>
+                      </td>
+                      <td style={{ ...td, borderLeft:"3px solid "+T.AM }}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
+                    </tr>
+                  );
+                }
+
+                var result = [mainRow].concat(subRows);
+                if (addExtraRow) result.push(addExtraRow);
+                return result;
               })}
             </tbody>
           </table>
