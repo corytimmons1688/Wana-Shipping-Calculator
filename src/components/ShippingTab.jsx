@@ -119,19 +119,33 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
       }
     }
 
-    // Map shipments by their ARRIVAL date for the inventory columns
-    var arrByWeek = {};
+    // Map base and lid arrivals separately — they can have different arrival dates
+    // (bAr vs lAr) so a single bAr-keyed bucket silently drops lid arrivals.
+    var bArrByWeek = {};
+    var lArrByWeek = {};
     for (var si2 = 0; si2 < ships.length; si2++) {
       var sh2 = ships[si2];
-      var aw = sh2.bAr ? sh2.bAr.getTime() : 0;
-      var bestArrWk = null, bestArrDist = Infinity;
+
+      // Bases keyed by bAr
+      var baw = sh2.bAr ? sh2.bAr.getTime() : 0;
+      var bestBArrWk = null, bestBArrDist = Infinity;
       for (var pi2 = 0; pi2 < prod.length; pi2++) {
-        var dist2 = Math.abs(prod[pi2].wk.getTime() - aw);
-        if (dist2 < bestArrDist) { bestArrDist = dist2; bestArrWk = prod[pi2].wk.getTime(); }
+        var dist2 = Math.abs(prod[pi2].wk.getTime() - baw);
+        if (dist2 < bestBArrDist) { bestBArrDist = dist2; bestBArrWk = prod[pi2].wk.getTime(); }
       }
-      if (bestArrWk !== null) {
-        if (!arrByWeek[bestArrWk]) arrByWeek[bestArrWk] = [];
-        arrByWeek[bestArrWk].push(sh2);
+      if (bestBArrWk !== null) {
+        bArrByWeek[bestBArrWk] = (bArrByWeek[bestBArrWk] || 0) + (sh2.bQ || 0);
+      }
+
+      // Lids keyed by lAr (falls back to bAr if lAr missing)
+      var law = sh2.lAr ? sh2.lAr.getTime() : baw;
+      var bestLArrWk = null, bestLArrDist = Infinity;
+      for (var pi3 = 0; pi3 < prod.length; pi3++) {
+        var dist3 = Math.abs(prod[pi3].wk.getTime() - law);
+        if (dist3 < bestLArrDist) { bestLArrDist = dist3; bestLArrWk = prod[pi3].wk.getTime(); }
+      }
+      if (bestLArrWk !== null) {
+        lArrByWeek[bestLArrWk] = (lArrByWeek[bestLArrWk] || 0) + (sh2.lQ || 0);
       }
     }
 
@@ -155,9 +169,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
       cumShippedB += depB; cumShippedL += depL;
 
       // Shipments ARRIVING this week (for inventory columns)
-      var arrivals = arrByWeek[wt] || [];
-      var arrB = 0, arrL = 0;
-      for (var ai = 0; ai < arrivals.length; ai++) { arrB += arrivals[ai].bQ; arrL += arrivals[ai].lQ; }
+      var arrB = bArrByWeek[wt] || 0;
+      var arrL = lArrByWeek[wt] || 0;
       cumArrB += arrB; cumArrL += arrL;
 
       var wkMonth = w.wk.getMonth();
@@ -180,18 +193,10 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
       cumDemand += weekDemand;
       var monthDemand = weekDemand;
 
-      // Physical inventory can never be negative — you just have stockouts.
-      // pairsArrived = complete sellable units (need both components).
-      // served = how many orders can actually be filled so far.
-      // stockOnHand = physical surplus (always >= 0).
-      // shortfall = unmet demand (always >= 0), shown separately in red.
-      var pairsArrived = Math.min(cumArrB, cumArrL);
-      var cumArrived = pairsArrived;
-      var served = Math.min(pairsArrived, cumDemand);
-      var stockOnHand = pairsArrived - served;
-      var shortfall = cumDemand - served;
-      var stockB = stockOnHand;
-      var stockL = stockOnHand;
+      var cumArrived = cumArrB + cumArrL;
+      var stockOnHand = cumArrived - cumDemand;
+      var stockB = cumArrB - cumDemand;
+      var stockL = cumArrL - cumDemand;
 
       var mosVal = 0;
       if (stockOnHand > 0 && wkMonth < 12) {
@@ -210,7 +215,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
         departures: departures, arrivals: arrivals,
         arrB: arrB, arrL: arrL, cumArrB: cumArrB, cumArrL: cumArrL,
         cumArrived: cumArrived, monthDemand: monthDemand,
-        cumDemand: cumDemand, stockOnHand: stockOnHand, shortfall: shortfall, stockB: stockB, stockL: stockL,
+        cumDemand: cumDemand, stockOnHand: stockOnHand, stockB: stockB, stockL: stockL,
         monthsOfStock: mosVal
       });
     }
@@ -301,8 +306,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Arrived</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Wk Demand</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Cumulative Demand</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Stock</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:"#dc2626", top:28, zIndex:2 }}>Shortfall</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Stk</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Stk</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Mo. Stock</th>
               </tr>
             </thead>
@@ -332,8 +337,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
                     <td style={{ ...td, textAlign:"right", color:T.AC, fontWeight:r.arrL>0?600:400 }}>{r.arrL>0?fm(r.arrL):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.monthDemand>0?"#9333ea":T.T2 }}>{r.monthDemand>0?fm(r.monthDemand):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.T2, fontSize:11 }}>{r.cumDemand>0?fm(r.cumDemand):""}</td>
-                    <td style={{ ...td, textAlign:"right", fontWeight:600, color:r.stockOnHand>0?T.GR:T.T2 }}>{r.cumArrB>0||r.cumDemand>0 ? (r.stockOnHand>0?fm(r.stockOnHand):"—") : ""}</td>
-                    <td style={{ ...td, textAlign:"right", fontWeight:600, color:r.shortfall>0?"#dc2626":T.T2 }}>{r.shortfall>0?fm(r.shortfall):""}</td>
+                    <td style={{ ...td, textAlign:"right", fontWeight:600, color:r.stockB<0?"#dc2626":r.stockB>0?T.GR:T.T2 }}>{r.cumArrB>0||r.cumDemand>0?fm(r.stockB):""}</td>
+                    <td style={{ ...td, textAlign:"right", fontWeight:600, color:r.stockL<0?"#dc2626":r.stockL>0?T.AC:T.T2 }}>{r.cumArrL>0||r.cumDemand>0?fm(r.stockL):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.monthsOfStock<3&&r.cumDemand>0?"#dc2626":r.monthsOfStock>=3?T.GR:T.T2, fontSize:11 }}>{r.cumDemand>0?r.monthsOfStock.toFixed(1):""}</td>
                   </tr>
                 );
