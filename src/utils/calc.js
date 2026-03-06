@@ -257,12 +257,14 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   }
 
   // ── PHASE 1 — Ocean (free full containers) ──────────────────────
+  // Iterate FORWARD through production weeks so containers ship as soon as
+  // inventory fills one — no batching, no deadline-driven aggregation.
   if (oc) {
     // Pass 1a: fill containers using base deadline (tighter)
     for (const d of demands) {
       const ocBD = addDays(d.bDeadline, -oc.transitDays);
       const validWeeks = prod.filter(pw => pw.wk <= ocBD);
-      for (let i = validWeeks.length - 1; i >= 0 && (d.bNeed > 0 || d.lNeed > 0); i--) {
+      for (let i = 0; i < validWeeks.length && (d.bNeed > 0 || d.lNeed > 0); i++) {
         fillAt("Standard Ocean", d, validWeeks[i].wk, oc.transitDays, d.bNeed, d.lNeed, false, false, null);
       }
     }
@@ -273,7 +275,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
       const ocBD = addDays(d.bDeadline, -oc.transitDays);
       if (ocLD <= ocBD) continue;
       const extraWeeks = prod.filter(pw => pw.wk > ocBD && pw.wk <= ocLD);
-      for (let i = extraWeeks.length - 1; i >= 0 && d.lNeed > 0; i--) {
+      for (let i = 0; i < extraWeeks.length && d.lNeed > 0; i++) {
         fillAt("Standard Ocean", d, extraWeeks[i].wk, oc.transitDays, padBases, d.lNeed, false, true, null);
       }
     }
