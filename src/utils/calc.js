@@ -265,31 +265,33 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     }
   }
 
-  // PHASE 3 — Fast Boat base/lid residuals (sub-pallet leftovers)
-  // FIX: Use per-unit cost comparison instead of total cost vs container cost.
-  // FB 20HC at $9,500 breaks even at 11,875 units ($0.80/unit Air).
-  // FB 40HC at $14,300 breaks even at 17,875 units.
-  // Use minPalOverride=1 to allow partial containers.
-  // Also handle lid residuals here, not just bases.
+  // PHASE 3 — Fast Boat base residuals (only when cheaper than Air per unit)
   if (fb) {
     for (const d of demands) {
       const bSD = addDays(d.bDeadline, -fb.transitDays);
-      const lSD = addDays(d.lDeadline, -fb.transitDays);
 
-      // Ship remaining bases via FB if it beats Air on a per-unit basis
-      if (d.bNeed > 0) {
+      if (d.bNeed >= pal.basePP) {
         const shipDate = bSD;
-        // Find cheapest FB container cost per unit for this quantity
-        let fbCheapest = Infinity;
-        for (const ck of Object.values(cont)) {
-          const unitsPerCont = ck.pallets * pal.basePP;
-          if (d.bNeed >= pal.basePP) { // at least 1 pallet
-            fbCheapest = Math.min(fbCheapest, ck.cost / Math.min(d.bNeed, unitsPerCont));
-          }
-        }
-        const airPerUnit = airCost.base;
-        if (fbCheapest < airPerUnit || d.bNeed >= pal.basePP) {
-          fillAt("Fast Boat", d, shipDate, fb.transitDays, d.bNeed, 0, false, false, 1);
+        const a = availAt(shipDate);
+        const actualBasesAvail = Math.min(d.bNeed, a.bS);
+        if (actualBasesAvail < pal.basePP) continue; // not enough for even 1 pallet
+        const actualPals = Math.floor(actualBasesAvail / pal.basePP);
+        const actualUnits = actualPals * pal.basePP;
+        // Try smallest container first — check cost against ACTUAL shippable quantity
+        for (const ckKey of ["20HC", "40HC"]) {
+          if (d.bNeed <= 0) break;
+          const ck = cont[ckKey];
+          if (actualPals > ck.pallets) continue; // doesn't fit
+          const fbPerUnit = ck.cost / actualUnits;
+          // Only ship if FB is genuinely cheaper than Air per unit
+          if (fbPerUnit >= airCost.base) continue;
+          const arrDate = addDays(shipDate, fb.transitDays);
+          res.push({ mo: d.mo, meth: "Fast Boat", cn: ck.label,
+            bQ: actualUnits, lQ: 0, tQ: actualUnits, cost: ck.cost,
+            bSd: new Date(shipDate), lSd: new Date(shipDate),
+            bAr: arrDate, lAr: arrDate, preShip: false, bPal: actualPals, lPal: 0 });
+          d.bNeed -= actualUnits;
+          break; // shipped, don't try larger container
         }
       }
 
