@@ -8,11 +8,13 @@ export function calcGLD(mkts) {
 
 export function calcProd(molds) {
   const S = new Date("2026-03-09"), wks = [];
-  let bC = 0, lC = 0, bPU = 0, lPU = 0, bP2U = 0;
+  let bC = 0, lC = 0, bPU = 0, lPU = 0, bP2U = 0, lP2U = 0;
   const bPD = new Date(molds.base.proto.avail), bMD = new Date(molds.base.prod.avail);
   const bP2 = molds.base.proto2 || null;
   const bP2D = bP2 ? new Date(bP2.avail) : null;
   const lPD = new Date(molds.lid.proto.avail), lMD = new Date(molds.lid.prod.avail);
+  const lP2 = molds.lid.proto2 || null;
+  const lP2D = lP2 ? new Date(lP2.avail) : null;
   for (let w = 0; w < 43; w++) {
     const wk = new Date(S); wk.setDate(wk.getDate() + w * 7);
     let bW = 0, lW = 0;
@@ -32,6 +34,11 @@ export function calcProd(molds) {
       const c3 = molds.lid.proto.life ? Math.min(o3, molds.lid.proto.life - lPU) : o3;
       lW += c3; lPU += c3;
     }
+    if (lP2 && lP2D && wk >= lP2D && (lP2.life == null || lP2U < lP2.life)) {
+      const o4 = lP2.daily * lP2.qty * lP2.days;
+      const c4 = lP2.life ? Math.min(o4, lP2.life - lP2U) : o4;
+      lW += c4; lP2U += c4;
+    }
     if (wk >= lMD) lW += molds.lid.prod.daily * molds.lid.prod.qty * molds.lid.prod.days;
     bC += bW; lC += lW;
     wks.push({ wk, bW, lW, bC, lC, ship: Math.min(bC, lC), tot: bW + lW,
@@ -41,8 +48,10 @@ export function calcProd(molds) {
 }
 
 export function calcCap(molds, pm, eq) {
-  const bCost = (molds.base.proto.qty * molds.base.proto.cost) + (molds.base.prod.qty * molds.base.prod.cost);
-  const lCost = (molds.lid.proto.qty * molds.lid.proto.cost) + (molds.lid.prod.qty * molds.lid.prod.cost);
+  let bCost = (molds.base.proto.qty * molds.base.proto.cost) + (molds.base.prod.qty * molds.base.prod.cost);
+  if (molds.base.proto2) bCost += molds.base.proto2.qty * molds.base.proto2.cost;
+  let lCost = (molds.lid.proto.qty * molds.lid.proto.cost) + (molds.lid.prod.qty * molds.lid.prod.cost);
+  if (molds.lid.proto2) lCost += molds.lid.proto2.qty * molds.lid.proto2.cost;
   const mT = bCost + lCost;
   let pT = 0; for (const p of pm) pT += p.qty * p.cost;
   let eT = 0; for (const e of eq) eT += e.qty * e.cost;
