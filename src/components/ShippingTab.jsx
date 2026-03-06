@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { MO } from "../data/defaults";
 import { fm, f$, fC, dF } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
@@ -15,11 +15,9 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
   var hl = hlState[0], setHl = hlState[1];
   var optState = useState(null); // null | "running" | {saved, original}
   var optStatus = optState[0], setOptStatus = optState[1];
-  // Inline editing state: { idx, field } or null
+  // Inline editing — which cell is open: { idx, field } | null
   var editingState = useState(null);
   var editing = editingState[0], setEditing = editingState[1];
-  var editValState = useState("");
-  var editVal = editValState[0], setEditVal = editValState[1];
 
   var doOptimize = useCallback(function() {
     if (!sc) return;
@@ -102,34 +100,45 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
     }, 50);
   }, [sc, upd]);
 
+  // Inline editing — which cell is open: { idx, field } | null
+  var editingState = useState(null);
+  var editing = editingState[0], setEditing = editingState[1];
+  // Use a ref for the live input value so commitEdit always reads the latest
+  // value regardless of which render closure fires onBlur/onKeyDown.
+  var editValRef = useRef("");
+
   var METHODS = ["Standard Ocean", "Fast Boat", "Air"];
 
   function startEdit(idx, field, curVal) {
+    editValRef.current = String(curVal);
     setEditing({ idx: idx, field: field });
-    setEditVal(String(curVal));
   }
 
-  function commitEdit() {
-    if (!editing) return;
-    var idx = editing.idx, field = editing.field;
+  // commitEditWith(idx, field, value) — explicit args, no closure dependency
+  function commitEditWith(idx, field, value) {
     if (field === "meth") {
-      if (METHODS.indexOf(editVal) >= 0) updShipEdit(idx, { meth: editVal });
+      if (METHODS.indexOf(value) >= 0) updShipEdit(idx, { meth: value });
     } else if (field === "bQ" || field === "lQ") {
-      var n = parseInt(editVal.replace(/,/g, ""), 10);
+      var n = parseInt(value.replace(/,/g, ""), 10);
       if (!isNaN(n) && n >= 0) {
-        var fields = {};
-        fields[field] = n;
-        updShipEdit(idx, fields);
+        var patch = {};
+        patch[field] = n;
+        updShipEdit(idx, patch);
       }
     }
     setEditing(null);
   }
 
+  function commitFromRef() {
+    if (!editing) return;
+    commitEditWith(editing.idx, editing.field, editValRef.current);
+  }
+
   function cancelEdit() { setEditing(null); }
 
-  function handleKeyDown(e) {
-    if (e.key === "Enter") commitEdit();
-    if (e.key === "Escape") cancelEdit();
+  function handleQtyKeyDown(e) {
+    if (e.key === "Enter")  { e.preventDefault(); commitFromRef(); }
+    if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
   }
 
   // Check if a shipment has manual edits
@@ -447,15 +456,18 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
               var edited = isEdited(i);
               var rowBg = isHl2 ? hlBg : edited ? "#fffbeb" : (i%2===0?"transparent":T.S2);
 
-              // Method cell — click to cycle through methods
+              // Method cell — select commits immediately on change (no blur ambiguity)
               var methCell;
               if (editing && editing.idx === i && editing.field === "meth") {
                 methCell = (
-                  <td style={td}>
-                    <select autoFocus value={editVal}
-                      onChange={function(e) { setEditVal(e.target.value); }}
-                      onBlur={commitEdit}
-                      onKeyDown={handleKeyDown}
+                  <td style={td} onClick={function(e) { e.stopPropagation(); }}>
+                    <select autoFocus value={editValRef.current}
+                      onChange={function(e) {
+                        var v = e.target.value;
+                        editValRef.current = v;
+                        commitEditWith(i, "meth", v);
+                      }}
+                      onKeyDown={function(e) { if (e.key === "Escape") { e.stopPropagation(); cancelEdit(); } }}
                       style={{ fontFamily:"inherit", fontSize:11, padding:"2px 4px", border:"1px solid "+T.AC, borderRadius:4, background:"#fff", cursor:"pointer" }}>
                       {METHODS.map(function(m) { return <option key={m} value={m}>{m}</option>; })}
                     </select>
@@ -472,14 +484,15 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                 );
               }
 
-              // Bases qty cell
+              // Bases qty cell — input writes to ref, commits on blur or Enter
               var bCell;
               if (editing && editing.idx === i && editing.field === "bQ") {
                 bCell = (
-                  <td style={{ ...td, textAlign:"right" }}>
-                    <input autoFocus type="text" value={editVal}
-                      onChange={function(e) { setEditVal(e.target.value); }}
-                      onBlur={commitEdit} onKeyDown={handleKeyDown}
+                  <td style={{ ...td, textAlign:"right" }} onClick={function(e) { e.stopPropagation(); }}>
+                    <input autoFocus type="text" defaultValue={String(sh.bQ)}
+                      onChange={function(e) { editValRef.current = e.target.value; }}
+                      onBlur={commitFromRef}
+                      onKeyDown={handleQtyKeyDown}
                       style={{ width:80, textAlign:"right", fontFamily:"inherit", fontSize:12, padding:"1px 4px", border:"1px solid "+T.GR, borderRadius:4 }} />
                   </td>
                 );
@@ -493,14 +506,15 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                 );
               }
 
-              // Lids qty cell
+              // Lids qty cell — same pattern
               var lCell;
               if (editing && editing.idx === i && editing.field === "lQ") {
                 lCell = (
-                  <td style={{ ...td, textAlign:"right" }}>
-                    <input autoFocus type="text" value={editVal}
-                      onChange={function(e) { setEditVal(e.target.value); }}
-                      onBlur={commitEdit} onKeyDown={handleKeyDown}
+                  <td style={{ ...td, textAlign:"right" }} onClick={function(e) { e.stopPropagation(); }}>
+                    <input autoFocus type="text" defaultValue={String(sh.lQ)}
+                      onChange={function(e) { editValRef.current = e.target.value; }}
+                      onBlur={commitFromRef}
+                      onKeyDown={handleQtyKeyDown}
                       style={{ width:80, textAlign:"right", fontFamily:"inherit", fontSize:12, padding:"1px 4px", border:"1px solid "+T.AC, borderRadius:4 }} />
                   </td>
                 );
