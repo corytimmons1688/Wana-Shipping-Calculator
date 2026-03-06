@@ -49,7 +49,7 @@ export const MOLDS = {
 
 export const CONTAINERS = {"20HC":{label:"20' HC",cost:9500,pallets:10,minPal:8},"40HC":{label:"40' HC",cost:14300,pallets:20,minPal:16}};
 export const PALLET = {basePP:9072,lidPP:30720,airBasePP:7500,airLidPP:25000};
-export const AIR_COST = {base:0.40,lid:0.12};
+export const AIR_COST = {palletRate:3000};
 // FIXED: baseLeadDays corrected from 10 to 14 (matches Excel Settings and spec: "12-14 days before month start")
 export const PARAMS = {baseLeadDays:14,lidLeadDays:7};
 export const PROTO_MOLDS = [{name:"Lid Mold VN",cost:1300,qty:1},{name:"EBM Jar VN",cost:1850,qty:1},{name:"Lid Mold CN",cost:2000,qty:1},{name:"EBM Jar CN",cost:1000,qty:1},{name:"IBM Jar CN",cost:2000,qty:1}];
@@ -61,6 +61,6 @@ export const PKL = [{cont:"20' HC",item:"Wana Jar",pallets:8,qpc:72576,wt:"2,070
 
 const dc = o => JSON.parse(JSON.stringify(o));
 export function initScenario() {
-  return { markets:dc(MARKETS), shipping:dc(SHIPPING), molds:dc(MOLDS), containers:dc(CONTAINERS), params:dc(PARAMS), pallet:dc(PALLET), airCost:dc(AIR_COST), protoMolds:dc(PROTO_MOLDS), equipment:dc(EQUIPMENT), protoTL:dc(PROTO_TL), prodTL:dc(PROD_TL), forecast:dc(FORECAST), pkl:dc(PKL), shipEdits:[], shipAdditions:[] };
+  return { markets:dc(MARKETS), shipping:dc(SHIPPING), molds:dc(MOLDS), containers:dc(CONTAINERS), params:dc(PARAMS), pallet:dc(PALLET), airCost:dc(AIR_COST), protoMolds:dc(PROTO_MOLDS), equipment:dc(EQUIPMENT), protoTL:dc(PROTO_TL), prodTL:dc(PROD_TL), forecast:dc(FORECAST), pkl:dc(PKL), shipEdits:[], shipAdditions:[], shipDeletions:[] };
 }
 export function mkScenario(name, base) { return { id: Date.now()+Math.random(), name, ...dc(base) }; }
