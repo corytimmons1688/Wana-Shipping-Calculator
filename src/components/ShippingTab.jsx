@@ -119,33 +119,35 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
       }
     }
 
-    // Map base and lid arrivals separately — they can have different arrival dates
-    // (bAr vs lAr) so a single bAr-keyed bucket silently drops lid arrivals.
-    var bArrByWeek = {};
-    var lArrByWeek = {};
+    // Map shipments by their ARRIVAL date for the inventory columns.
+    // FIXED: bases and lids may arrive on different dates (e.g. Air ships each
+    // component on its own deadline). We track them in separate maps so each
+    // component shows up in the correct week row.
+    var baseArrByWeek = {}, lidArrByWeek = {};
+    function snapToWeek(date) {
+      var best = null, bestDist = Infinity;
+      for (var pi2 = 0; pi2 < prod.length; pi2++) {
+        var d2 = Math.abs(prod[pi2].wk.getTime() - date);
+        if (d2 < bestDist) { bestDist = d2; best = prod[pi2].wk.getTime(); }
+      }
+      return best;
+    }
     for (var si2 = 0; si2 < ships.length; si2++) {
       var sh2 = ships[si2];
-
-      // Bases keyed by bAr
-      var baw = sh2.bAr ? sh2.bAr.getTime() : 0;
-      var bestBArrWk = null, bestBArrDist = Infinity;
-      for (var pi2 = 0; pi2 < prod.length; pi2++) {
-        var dist2 = Math.abs(prod[pi2].wk.getTime() - baw);
-        if (dist2 < bestBArrDist) { bestBArrDist = dist2; bestBArrWk = prod[pi2].wk.getTime(); }
+      // Bases: use bAr; lids: use lAr (they differ for component-split Air shipments)
+      if (sh2.bQ > 0 && sh2.bAr) {
+        var bWk = snapToWeek(sh2.bAr.getTime());
+        if (bWk !== null) {
+          if (!baseArrByWeek[bWk]) baseArrByWeek[bWk] = [];
+          baseArrByWeek[bWk].push(sh2);
+        }
       }
-      if (bestBArrWk !== null) {
-        bArrByWeek[bestBArrWk] = (bArrByWeek[bestBArrWk] || 0) + (sh2.bQ || 0);
-      }
-
-      // Lids keyed by lAr (falls back to bAr if lAr missing)
-      var law = sh2.lAr ? sh2.lAr.getTime() : baw;
-      var bestLArrWk = null, bestLArrDist = Infinity;
-      for (var pi3 = 0; pi3 < prod.length; pi3++) {
-        var dist3 = Math.abs(prod[pi3].wk.getTime() - law);
-        if (dist3 < bestLArrDist) { bestLArrDist = dist3; bestLArrWk = prod[pi3].wk.getTime(); }
-      }
-      if (bestLArrWk !== null) {
-        lArrByWeek[bestLArrWk] = (lArrByWeek[bestLArrWk] || 0) + (sh2.lQ || 0);
+      if (sh2.lQ > 0 && sh2.lAr) {
+        var lWk = snapToWeek(sh2.lAr.getTime());
+        if (lWk !== null) {
+          if (!lidArrByWeek[lWk]) lidArrByWeek[lWk] = [];
+          lidArrByWeek[lWk].push(sh2);
+        }
       }
     }
 
@@ -168,9 +170,13 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
       for (var di = 0; di < departures.length; di++) { depB += departures[di].bQ; depL += departures[di].lQ; }
       cumShippedB += depB; cumShippedL += depL;
 
-      // Shipments ARRIVING this week (for inventory columns)
-      var arrB = bArrByWeek[wt] || 0;
-      var arrL = lArrByWeek[wt] || 0;
+      // Shipments ARRIVING this week — bases and lids tracked separately
+      // (Air shipments split by component deadline, so bAr ≠ lAr is possible)
+      var bArrivals = baseArrByWeek[wt] || [];
+      var lArrivals = lidArrByWeek[wt] || [];
+      var arrB = 0, arrL = 0;
+      for (var ai = 0; ai < bArrivals.length; ai++) arrB += bArrivals[ai].bQ;
+      for (var ai2 = 0; ai2 < lArrivals.length; ai2++) arrL += lArrivals[ai2].lQ;
       cumArrB += arrB; cumArrL += arrL;
 
       var wkMonth = w.wk.getMonth();
@@ -193,10 +199,13 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
       cumDemand += weekDemand;
       var monthDemand = weekDemand;
 
-      var cumArrived = cumArrB + cumArrL;
-      var stockOnHand = cumArrived - cumDemand;
+      // stockB / stockL: per-component surplus at Calyx (negative = shortfall)
       var stockB = cumArrB - cumDemand;
       var stockL = cumArrL - cumDemand;
+      // FIXED: a complete unit requires 1 base AND 1 lid.
+      // cumArrB + cumArrL double-counts arrivals (e.g. 5K bases + 40K lids ≠ 45K sets).
+      // True fulfillable inventory = min(bases, lids) - demand.
+      var stockOnHand = Math.min(cumArrB, cumArrL) - cumDemand;
 
       var mosVal = 0;
       if (stockOnHand > 0 && wkMonth < 12) {
@@ -212,7 +221,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
       rows.push({
         wk: w.wk, bW: w.bW, lW: w.lW, bC: w.bC, lC: w.lC,
         onHandB: onHandB, onHandL: onHandL,
-        departures: departures,
+        departures: departures, arrivals: arrivals,
         arrB: arrB, arrL: arrL, cumArrB: cumArrB, cumArrL: cumArrL,
         cumArrived: cumArrived, monthDemand: monthDemand,
         cumDemand: cumDemand, stockOnHand: stockOnHand, stockB: stockB, stockL: stockL,
@@ -385,7 +394,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
                 <tr key={i} onClick={function() { setHl(function(cur) { return cur === "d"+i ? null : "d"+i; }); }} style={{ background: isHl2 ? hlBg : (i%2===0?"transparent":T.S2), cursor:"pointer", transition:"background 0.1s" }}>
                   <td style={{ ...td, color:T.T2 }}>{i+1}</td>
                   <td style={{ ...td, fontWeight:600 }}>{MO[sh.mo]}</td>
-                  <td style={td}><Bg method={sh.meth}/>{sh.preShip && <span style={{ marginLeft:4, fontSize:8, color:T.GR, fontWeight:700 }}>PRE</span>}{sh.consolidated && <span style={{ marginLeft:4, fontSize:8, color:T.AM, fontWeight:700 }}>COMB</span>}</td>
+                  <td style={td}><Bg method={sh.meth}/>{sh.preShip && <span style={{ marginLeft:4, fontSize:8, color:T.GR, fontWeight:700 }}>PRE</span>}{sh.consolidated && <span style={{ marginLeft:4, fontSize:8, color:T.AM, fontWeight:700 }}>COMB</span>}{sh.lateDelivery && <span style={{ marginLeft:4, fontSize:8, color:"#dc2626", fontWeight:700 }}>LATE</span>}</td>
                   <td style={{ ...td, color:T.T2, fontSize:11 }}>{sh.cn}</td>
                   <td style={{ ...td, textAlign:"center", fontSize:10, color:T.T2 }}>{sh.bPal != null ? (sh.bPal + "B/" + sh.lPal + "L") : "\u2014"}</td>
                   <td style={{ ...td, textAlign:"right", color:T.GR, fontWeight:600 }}>{fm(sh.bQ)}</td>
