@@ -298,20 +298,30 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     }
   }
 
-  // PHASE 4 — Air: last resort for genuine production gaps
+  // PHASE 4 — Air: last resort, but ONLY ship what's actually produced
   if (ar) {
     const abPP = pal.airBasePP || 7500, alPP = pal.airLidPP || 25000;
     for (const d of demands) {
       if (d.bNeed <= 0 && d.lNeed <= 0) continue;
       const bSD = addDays(d.bDeadline, -ar.transitDays);
-      const bQ = d.bNeed > 0 ? Math.ceil(d.bNeed / abPP) * abPP : 0;
-      const lQ = d.lNeed > 0 ? Math.ceil(d.lNeed / alPP) * alPP : 0;
-      if (bQ + lQ > 0) {
-        res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ, lQ, tQ: bQ + lQ,
-          cost: bQ * airCost.base + lQ * airCost.lid,
-          bSd: new Date(bSD), lSd: new Date(bSD), bAr: addDays(bSD, ar.transitDays), lAr: addDays(bSD, ar.transitDays),
-          bPal: bQ > 0 ? Math.ceil(bQ / abPP) : 0, lPal: lQ > 0 ? Math.ceil(lQ / alPP) : 0, preShip: false });
-        d.bNeed = 0; d.lNeed = 0;
+      const lSD = addDays(d.lDeadline, -ar.transitDays);
+      // Use the LATER date so both bases and lids exist when shipped
+      const shipDate = bSD > lSD ? bSD : lSD;
+      const a = availAt(shipDate);
+      // Ship what's available, capped to what's needed — no phantom units
+      let bShip = Math.min(d.bNeed, a.bS);
+      let lShip = Math.min(d.lNeed, a.lS);
+      // Round UP to air pallets only if production supports it, otherwise ship exact available
+      if (bShip > 0 && bShip < abPP && a.bS >= abPP) bShip = abPP;
+      else if (bShip >= abPP) bShip = Math.min(Math.ceil(bShip / abPP) * abPP, a.bS);
+      if (lShip > 0 && lShip < alPP && a.lS >= alPP) lShip = alPP;
+      else if (lShip >= alPP) lShip = Math.min(Math.ceil(lShip / alPP) * alPP, a.lS);
+      if (bShip + lShip > 0) {
+        res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: bShip, lQ: lShip, tQ: bShip + lShip,
+          cost: bShip * airCost.base + lShip * airCost.lid,
+          bSd: new Date(shipDate), lSd: new Date(shipDate), bAr: addDays(shipDate, ar.transitDays), lAr: addDays(shipDate, ar.transitDays),
+          bPal: bShip > 0 ? Math.ceil(bShip / abPP) : 0, lPal: lShip > 0 ? Math.ceil(lShip / alPP) : 0, preShip: false });
+        d.bNeed -= bShip; d.lNeed -= lShip;
       }
     }
   }
