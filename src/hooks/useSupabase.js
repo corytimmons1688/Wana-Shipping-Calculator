@@ -49,8 +49,22 @@ export function useSupabase(scenarios, setScenarios) {
       if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
       const rows = await res.json();
       if (rows.length > 0 && Array.isArray(rows[0].data) && rows[0].data.length > 0) {
-        // DB has data — load it into state
-        setScenarios(rows[0].data);
+        // DB has data — migrate then load into state
+        const loaded = rows[0].data;
+        for (const sc of loaded) {
+          // Migrate: add lid.proto2 if missing (added Mar 2026)
+          if (sc.molds && sc.molds.lid && !sc.molds.lid.proto2) {
+            sc.molds.lid.proto2 = { mat:"PP", daily:1750, avail:"2026-04-06", life:50000, days:6, cav:8, qty:1, cost:11500 };
+          }
+          // Migrate: update proto avail dates from 3/15 to 3/23 if still on old value
+          if (sc.molds && sc.molds.base && sc.molds.base.proto && sc.molds.base.proto.avail === "2026-03-15") {
+            sc.molds.base.proto.avail = "2026-03-23";
+          }
+          if (sc.molds && sc.molds.lid && sc.molds.lid.proto && sc.molds.lid.proto.avail === "2026-03-15") {
+            sc.molds.lid.proto.avail = "2026-03-23";
+          }
+        }
+        setScenarios(loaded);
         setStatus("saved");
       } else {
         // DB is empty — write the current default (Base Plan) up to Supabase now
