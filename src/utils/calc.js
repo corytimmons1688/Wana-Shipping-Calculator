@@ -116,14 +116,42 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   }
 
   // ── Demand events (go-live filtered, monthly) ─────────────────
+  // Anchor deadline calculation to actual first demand date:
+  //   - Markets WITH skuDetail: use the actual first demand week (e.g. NJ Apr 27)
+  //   - Markets WITHOUT skuDetail: use mid-month (15th) as anchor, since monthly
+  //     demand figures are spread across the month, not concentrated on day 1.
+  //     This shifts the FB deadline ~2 weeks later when production is more available.
+  const weeklyDem = calcWeeklyDemand(mkts);
+
+  // Build a per-month "first demand week" only from SKU-detail markets
+  const skuFirstWeek = {}; // month → earliest week with SKU-driven demand
+  for (const mk of mkts) {
+    if (!mk.goLive || !mk.skuDetail) continue;
+    for (const w of weeklyDem) {
+      if (w.wk.getMonth() + 1 < mk.goLive) continue;
+      // Check if this week has demand attributed to this SKU market
+      if (w.demand > 0) {
+        const m = w.wk.getMonth();
+        if (!skuFirstWeek[m] || w.wk < skuFirstWeek[m]) skuFirstWeek[m] = w.wk;
+      }
+    }
+  }
+
   const demands = [];
   for (let m = 0; m < 12; m++) {
     if (gld[m] <= 0) continue;
-    const ms = new Date(2026, m, 1);
+    var anchor;
+    if (skuFirstWeek[m]) {
+      // Use actual first SKU demand week — precise for markets with weekly data
+      anchor = skuFirstWeek[m];
+    } else {
+      // Use mid-month for markets with only monthly estimates
+      anchor = new Date(2026, m, 15);
+    }
     demands.push({
       mo: m, dem: gld[m], remaining: gld[m],
-      bDL: addDays(ms, -par.baseLeadDays),
-      lDL: addDays(ms, -par.lidLeadDays),
+      bDL: addDays(anchor, -par.baseLeadDays),
+      lDL: addDays(anchor, -par.lidLeadDays),
     });
   }
 
