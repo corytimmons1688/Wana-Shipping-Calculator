@@ -156,8 +156,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
               <tr>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Wk</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Wk</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Cum</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2, borderRight:"3px solid "+T.AC }}>Lid Cum</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Cumulative</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2, borderRight:"3px solid "+T.AC }}>Lid Cumulative</th>
                 <th style={{ ...th, textAlign:"left", fontSize:9, top:28, zIndex:2 }}>Method</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Bases</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lids</th>
@@ -166,7 +166,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2, borderLeft:"3px solid "+T.AM }}>Base Arrived</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Arrived</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Wk Demand</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Cum Demand</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Cumulative Demand</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Stk</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Stk</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Mo. Stock</th>
