@@ -21,12 +21,64 @@ export default function App() {
   const weeklyDem = useMemo(() => calcWeeklyDemand(sc.markets), [sc]);
   const prod = useMemo(() => calcProd(sc.molds), [sc]);
   const ships = useMemo(() => optimize(sc.markets, sc.molds, sc.shipping, sc.params, sc.containers, sc.pallet, sc.airCost), [sc]);
+
+  // Apply manual edits on top of the optimized ships.
+  // Each edit in sc.shipEdits is { idx, meth?, bQ?, lQ? }.
+  // Cost and arrival dates are recalculated from the override values.
+  const displayShips = useMemo(() => {
+    if (!sc.shipEdits || sc.shipEdits.length === 0) return ships;
+    const editMap = {};
+    for (const e of sc.shipEdits) editMap[e.idx] = e;
+    return ships.map((sh, i) => {
+      const ed = editMap[i];
+      if (!ed) return sh;
+      const meth = ed.meth !== undefined ? ed.meth : sh.meth;
+      const bQ   = ed.bQ  !== undefined ? ed.bQ  : sh.bQ;
+      const lQ   = ed.lQ  !== undefined ? ed.lQ  : sh.lQ;
+      const tQ   = bQ + lQ;
+      // Find transit days for chosen method
+      const methObj = sc.shipping.find(s => s.method === meth) || sc.shipping.find(s => s.method === sh.meth);
+      const tDays = methObj ? methObj.transitDays : 10;
+      // Arrival dates from ship date + new transit days
+      const bAr = new Date(sh.bSd); bAr.setDate(bAr.getDate() + tDays);
+      const lAr = new Date(sh.lSd); lAr.setDate(lAr.getDate() + tDays);
+      // Cost: Air = per-unit; Ocean = 0; Fast Boat = container cost
+      let cost = sh.cost;
+      if (meth === "Air") {
+        cost = bQ * sc.airCost.base + lQ * sc.airCost.lid;
+      } else if (meth === "Standard Ocean") {
+        cost = 0;
+      } else {
+        // Fast Boat: pick smallest container that fits pallets
+        const totalPallets = Math.ceil(bQ / sc.pallet.basePP) + Math.ceil(lQ / sc.pallet.lidPP);
+        const c20 = sc.containers["20HC"], c40 = sc.containers["40HC"];
+        if (totalPallets <= c20.pallets) cost = c20.cost;
+        else cost = c40.cost;
+      }
+      return { ...sh, meth, bQ, lQ, tQ, cost, bAr, lAr, cn: meth === "Air" ? "Air" : sh.cn };
+    });
+  }, [ships, sc.shipEdits, sc.shipping, sc.airCost, sc.pallet, sc.containers]);
+
+  const updShipEdit = useCallback((idx, fields) => {
+    upd(s => {
+      if (!s.shipEdits) s.shipEdits = [];
+      const existing = s.shipEdits.findIndex(e => e.idx === idx);
+      if (existing >= 0) Object.assign(s.shipEdits[existing], fields);
+      else s.shipEdits.push({ idx, ...fields });
+    });
+  }, [upd]);
+
+  const clearShipEdits = useCallback(() => {
+    upd(s => { s.shipEdits = []; });
+  }, [upd]);
+
+  const hasShipEdits = sc.shipEdits && sc.shipEdits.length > 0;
   const cap = useMemo(() => calcCap(sc.molds, sc.protoMolds, sc.equipment), [sc]);
   const frt = useMemo(() => {
     const s = {}; let tot = 0, units = 0;
-    for (const sh of ships) { if (!s[sh.meth]) s[sh.meth] = { n:0,u:0,c:0,b:0,l:0 }; s[sh.meth].n++; s[sh.meth].u += sh.tQ; s[sh.meth].c += sh.cost; s[sh.meth].b += sh.bQ; s[sh.meth].l += sh.lQ; tot += sh.cost; units += sh.tQ; }
+    for (const sh of displayShips) { if (!s[sh.meth]) s[sh.meth] = { n:0,u:0,c:0,b:0,l:0 }; s[sh.meth].n++; s[sh.meth].u += sh.tQ; s[sh.meth].c += sh.cost; s[sh.meth].b += sh.bQ; s[sh.meth].l += sh.lQ; tot += sh.cost; units += sh.tQ; }
     return { byM: s, tot, units };
-  }, [ships]);
+  }, [displayShips]);
   const addSc = () => { const ns = mkScenario("Scenario " + (scenarios.length + 1), sc); setScenarios(p => [...p, ns]); setActive(scenarios.length); };
   const dupeSc = () => { const ns = mkScenario(sc.name + " (copy)", sc); setScenarios(p => [...p, ns]); setActive(scenarios.length); };
   const delSc = (idx) => { if (scenarios.length <= 1) return; setScenarios(p => p.filter((_, i) => i !== idx)); setActive(a => idx < a ? a - 1 : idx === a ? Math.min(a, scenarios.length - 2) : a); };
@@ -76,7 +128,7 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"shipping", l:
           {mainTabs.map(t => { const a = tab === t.k; return <button key={t.k} onClick={() => setTab(t.k)} style={{ padding:"9px 16px", cursor:"pointer", border:"none", borderBottom:a ? "2px solid "+T.AC : "2px solid transparent", background:"transparent", color:a ? T.AC : T.T2, fontWeight:a ? 700 : 500, fontSize:12, display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", fontFamily:"inherit" }}><span>{t.i}</span>{t.l}</button>; })}
         </div>
         {tab === "demand" && <DemandTab sc={sc} gld={gld} annD={annD} upd={upd} />}
-        {tab === "shipping" && <ShippingTab ships={ships} prod={prod} frt={frt} gld={gld} weeklyDem={weeklyDem} sc={sc} upd={upd} />}
+        {tab === "shipping" && <ShippingTab ships={displayShips} prod={prod} frt={frt} gld={gld} weeklyDem={weeklyDem} sc={sc} upd={upd} updShipEdit={updShipEdit} clearShipEdits={clearShipEdits} hasShipEdits={hasShipEdits} />}
         {tab === "settings" && <SettingsTab sc={sc} cap={cap} upd={upd} />}
       </>)}
       <AiAssistant sc={sc} gld={gld} ships={ships} prod={prod} frt={frt} cap={cap} />
