@@ -77,24 +77,37 @@ function packOne(bAvail, lAvail, maxPal, minPal, bPP, lPP) {
 }
 
 // ============================================================
-// SHIPPING OPTIMIZER
-// Architecture:
-//   committedBy(date) = date-filtered (only counts shipments with shipDate <= date)
-//   This is correct because production is cumulative and nested:
-//   units at week 8 are a subset of week 12. Each availAt(date) check
-//   uses prodAt(date) which bounds the pool to that date's cumulative.
+// SHIPPING OPTIMIZER — Production-Forward Architecture
 //
-//   Phase 1:   Ocean (free full containers) — fills greedily for all months
-//   Phase 1.5: Consolidate sub-pallet lid residuals into one free Ocean container
-//   Phase 2:   FB lids (multi-week scan, cost-checked vs Air)
-//   Phase 3:   FB bases (cost-checked against ACTUAL available quantity)
-//   Phase 4:   Air (production-constrained — never ships phantom units)
-//   Post-pass: Remove Air made redundant by cumulative surplus
+// Priorities:
+//   P1: Product on hand at Calyx to support demand (coverage first)
+//   P2: Minimize shipping cost (Ocean > Fast Boat > Air)
+//   P3: Build inventory at Calyx; don't store at factory unless
+//       holding for a full Ocean container
+//
+// Phase 1A: Fast Boat / Air for months Ocean physically cannot reach
+//           (production doesn't exist by Ocean ship-by deadline).
+//           Runs FIRST to claim production before Ocean does.
+//
+// Phase 1B: Pre-reserve Fast Boat for months where Ocean can serve
+//           but can't fully cover demand. Draws from the FB-only
+//           window (between Ocean deadline and FB deadline) via
+//           drawNewest(), so it doesn't cannibalize production
+//           that Ocean needs for its earlier ship-by date.
+//
+// Phase 2:  Production-forward Ocean — walk forward week by week,
+//           ship a full container the moment inventory fills one.
+//           Never holds units at the factory.
+//
+// Phase 3:  Fast Boat mop-up for any remaining gaps.
+// Phase 4:  Air — last resort, production-constrained only.
 // ============================================================
 
 export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   const gld = calcGLD(mkts), prod = calcProd(molds), res = [];
 
+
+  // ── Resolve shipping method configs ───────────────────────────
   let oc = null, fb = null, ar = null;
   for (const s of ship) {
     if (s.method === "Standard Ocean") oc = s;
@@ -102,26 +115,23 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     if (s.method === "Air") ar = s;
   }
 
+  // ── Demand events (go-live filtered, monthly) ─────────────────
   const demands = [];
   for (let m = 0; m < 12; m++) {
     if (gld[m] <= 0) continue;
     const ms = new Date(2026, m, 1);
     demands.push({
-      mo: m, dem: gld[m],
-      bDeadline: addDays(ms, -par.baseLeadDays),
-      lDeadline: addDays(ms, -par.lidLeadDays),
-      bNeed: gld[m], lNeed: gld[m]
+      mo: m, dem: gld[m], remaining: gld[m],
+      bDL: addDays(ms, -par.baseLeadDays),
+      lDL: addDays(ms, -par.lidLeadDays),
     });
   }
 
-  // BUCKET-BASED INVENTORY TRACKING
-  // Each production week is a discrete bucket of units. When a shipment draws
-  // from date X, it depletes from buckets ≤ X (oldest first). Once depleted,
-  // units are gone everywhere. This prevents double-counting without blocking
-  // future phases from using genuinely available production.
-  const buckets = prod.filter(p => p.bW > 0 || p.lW > 0).map(p => ({
-    wk: p.wk, bR: p.bW, lR: p.lW  // bR/lR = remaining in this bucket
-  }));
+  // ── Bucket-based inventory ────────────────────────────────────
+  // Each production week is a discrete pool. drawFrom() physically
+  // removes units so they can't be double-counted across phases.
+  const buckets = prod.filter(p => p.bW > 0 || p.lW > 0)
+                      .map(p => ({ wk: p.wk, bR: p.bW, lR: p.lW }));
 
   function availAt(date) {
     let bS = 0, lS = 0;
@@ -130,311 +140,287 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   }
 
   function drawFrom(date, bQty, lQty) {
-    let bTaken = 0, lTaken = 0;
+    let bL = bQty, lL = lQty;
     for (const bk of buckets) {
       if (bk.wk > date) continue;
-      if (bQty > bTaken && bk.bR > 0) {
-        const take = Math.min(bQty - bTaken, bk.bR);
-        bk.bR -= take; bTaken += take;
-      }
-      if (lQty > lTaken && bk.lR > 0) {
-        const take = Math.min(lQty - lTaken, bk.lR);
-        bk.lR -= take; lTaken += take;
-      }
+      if (bL > 0 && bk.bR > 0) { const t = Math.min(bL, bk.bR); bk.bR -= t; bL -= t; }
+      if (lL > 0 && bk.lR > 0) { const t = Math.min(lL, bk.lR); bk.lR -= t; lL -= t; }
     }
-    return { bTaken, lTaken };
   }
 
-  function fillAt(method, d, shipDate, transitDays, bMax, lMax, preShip, stopWhenLidsDone, minPalOverride) {
-    const arrDate = addDays(shipDate, transitDays);
+  // drawNewest: draws from buckets within (fromDate, toDate] newest-first,
+  // then falls back to oldest-first from before fromDate if still needed.
+  // Used in Phase 1B so FB reservations don't consume Ocean's early production.
+  function drawNewest(fromDate, toDate, bQty, lQty) {
+    const inWindow = buckets
+      .filter(b => b.wk > fromDate && b.wk <= toDate)
+      .sort((a, b) => b.wk - a.wk);
+    let bL = bQty, lL = lQty;
+    for (const bk of inWindow) {
+      if (bL > 0 && bk.bR > 0) { const t = Math.min(bL, bk.bR); bk.bR -= t; bL -= t; }
+      if (lL > 0 && bk.lR > 0) { const t = Math.min(lL, bk.lR); bk.lR -= t; lL -= t; }
+    }
+    // Fall back to oldest-first from before fromDate
+    if (bL > 0 || lL > 0) drawFrom(fromDate, bL, lL);
+  }
+
+  // ── Container packer ──────────────────────────────────────────
+  function packCont(bAv, lAv, contKey) {
+    const ck = cont[contKey];
+    if (!ck) return null;
+    const maxP = ck.pallets, minP = ck.minPal || (maxP <= 10 ? 8 : 16);
+    for (let lp = Math.min(maxP, Math.floor(lAv / pal.lidPP)); lp >= 0; lp--) {
+      const bp = Math.min(maxP - lp, Math.floor(bAv / pal.basePP));
+      if (lp + bp >= minP) return { bQ: bp * pal.basePP, lQ: lp * pal.lidPP, bPal: bp, lPal: lp };
+    }
+    return null;
+  }
+
+  // Can Ocean physically reach demand month d?
+  // True if cumulative production >= one minimum container by Ocean ship-by date.
+  const MIN_PKG = (cont["20HC"] ? cont["20HC"].minPal || 8 : 8) * pal.basePP;
+  function oceanCanServe(d) {
+    if (!oc) return false;
+    const shipBy = addDays(d.bDL, -oc.transitDays);
+    return prod.some(w => w.wk <= shipBy && w.bC >= MIN_PKG);
+  }
+
+  // Simulate max Ocean delivery to month d given current bucket state.
+  // Read-only — clones relevant buckets.
+  function maxOceanDelivery(d) {
+    if (!oc) return 0;
+    const oceanBy = addDays(d.bDL, -oc.transitDays);
+    const sim = buckets.filter(b => b.wk <= oceanBy).map(b => ({ bR: b.bR, lR: b.lR }));
+    let total = 0;
     for (const ckKey of ["40HC", "20HC"]) {
-      const ck = cont[ckKey];
-      const maxPal = ck.pallets;
-      const minPal = minPalOverride != null ? minPalOverride : (ck.minPal || (maxPal <= 10 ? 8 : 16));
-      const cost = method === "Standard Ocean" ? 0 : ck.cost;
+      const ck = cont[ckKey]; if (!ck) continue;
+      const maxP = ck.pallets, minP = ck.minPal || (maxP <= 10 ? 8 : 16);
       while (true) {
-        if (stopWhenLidsDone && d.lNeed <= 0) break;
-        const a = availAt(shipDate);
-        const remB = Math.min(a.bS, Math.max(0, bMax - (d.dem - d.bNeed - bMax < 0 ? 0 : 0)));
-        const remL = Math.min(a.lS, Math.max(0, lMax));
-        if (remB + remL <= 0) break;
-        const r = packOne(Math.min(remB, d.bNeed > 0 ? d.bNeed : remB), Math.min(remL, d.lNeed > 0 ? d.lNeed : remL), maxPal, minPal, pal.basePP, pal.lidPP);
-        if (!r) break;
-        // Draw from production buckets (physically removes units)
-        drawFrom(shipDate, r.bQ, r.lQ);
-        res.push({ mo: d.mo, meth: method, cn: ck.label,
-          bQ: r.bQ, lQ: r.lQ, tQ: r.bQ + r.lQ, cost,
-          bSd: new Date(shipDate), lSd: new Date(shipDate), bAr: arrDate, lAr: arrDate,
-          preShip: !!preShip, bPal: r.bPallets, lPal: r.lPallets });
-        d.bNeed -= r.bQ; d.lNeed -= r.lQ;
-        bMax = Math.max(0, bMax - r.bQ);
-        lMax = Math.max(0, lMax - r.lQ);
+        let bS = 0, lS = 0; for (const b of sim) { bS += b.bR; lS += b.lR; }
+        let found = false;
+        for (let lp = Math.min(maxP, Math.floor(lS / pal.lidPP)); lp >= 0; lp--) {
+          const bp = Math.min(maxP - lp, Math.floor(bS / pal.basePP));
+          if (lp + bp >= minP) {
+            const bQ = bp * pal.basePP, lQ = lp * pal.lidPP;
+            let bL = bQ, lL = lQ;
+            for (const b of sim) {
+              if (bL > 0 && b.bR > 0) { const t = Math.min(bL, b.bR); b.bR -= t; bL -= t; }
+              if (lL > 0 && b.lR > 0) { const t = Math.min(lL, b.lR); b.lR -= t; lL -= t; }
+            }
+            total += bQ + lQ; found = true; break;
+          }
+        }
+        if (!found) break;
+      }
+    }
+    return total;
+  }
+
+  // ── PHASE 1A: Fast Boat / Air for months Ocean can't reach ────
+  for (const d of demands) {
+    if (oceanCanServe(d)) continue;
+
+    // Fast Boat
+    if (fb) {
+      const fbBy = addDays(d.bDL, -fb.transitDays);
+      for (const ckKey of ["40HC", "20HC"]) {
+        const ck = cont[ckKey]; if (!ck) continue;
+        while (d.remaining > 0) {
+          const { bS, lS } = availAt(fbBy);
+          const r = packCont(Math.min(bS, d.remaining), Math.min(lS, d.remaining), ckKey);
+          if (!r) break;
+          const airEq = r.bQ * airCost.base + r.lQ * airCost.lid;
+          if (ck.cost >= airEq) break;
+          drawFrom(fbBy, r.bQ, r.lQ);
+          const qty = r.bQ + r.lQ;
+          d.remaining -= Math.min(qty, d.remaining);
+          res.push({ mo: d.mo, meth: "Fast Boat", cn: ck.label, bQ: r.bQ, lQ: r.lQ,
+            tQ: qty, cost: ck.cost,
+            bSd: new Date(fbBy), lSd: new Date(fbBy),
+            bAr: addDays(fbBy, fb.transitDays), lAr: addDays(fbBy, fb.transitDays),
+            bPal: r.bPal, lPal: r.lPal });
+        }
+      }
+    }
+
+    // Air for whatever Fast Boat couldn't cover
+    if (d.remaining > 0 && ar) {
+      const airBy = addDays(d.bDL, -ar.transitDays);
+      const { bS, lS } = availAt(airBy);
+      const bShip = Math.min(d.remaining, bS);
+      const lShip = Math.min(Math.max(0, d.remaining - bShip), lS);
+      const qty = bShip + lShip;
+      if (qty > 0) {
+        drawFrom(airBy, bShip, lShip);
+        d.remaining -= qty;
+        res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: bShip, lQ: lShip,
+          tQ: qty, cost: bShip * airCost.base + lShip * airCost.lid,
+          bSd: new Date(airBy), lSd: new Date(airBy),
+          bAr: addDays(airBy, ar.transitDays), lAr: addDays(airBy, ar.transitDays),
+          bPal: 0, lPal: 0 });
       }
     }
   }
 
-  const minContPal = Math.min(...Object.values(cont).map(c => c.minPal || (c.pallets <= 10 ? 8 : 16)));
-  const padBases = minContPal * pal.basePP;
-
-  // ── PHASE 0 — Reserve Air/FB ONLY for months where Ocean is impossible ───
-  // A month needs Phase 0 only when ZERO production weeks exist before the
-  // Ocean lid ship-by date (the later of the two deadlines). If any production
-  // week exists in the Ocean window, Phase 1 should handle it — even if the
-  // snapshot at a single date looks low due to earlier bucket draws.
-  if (ar) {
-    const abPP = pal.airBasePP || 7500, alPP = pal.airLidPP || 25000;
+  // ── PHASE 1B: Pre-reserve Fast Boat for Ocean shortfalls ──────
+  // For each Ocean-eligible month, simulate how much Ocean can deliver.
+  // If demand exceeds that, reserve the shortfall via Fast Boat now —
+  // drawing from the FB-only window (between Ocean ship-by and FB ship-by)
+  // newest-first, so we don't consume production that Ocean needs.
+  if (fb && oc) {
     for (const d of demands) {
-      // Use the LATER lid deadline — gives Ocean the maximum window
-      const ocLD = addDays(d.lDeadline, -(oc ? oc.transitDays : 45));
-      const anyOceanProd = prod.some(pw => pw.wk <= ocLD && (pw.bW > 0 || pw.lW > 0));
-      if (anyOceanProd) continue; // Production exists in Ocean window → Phase 1 handles it
+      if (!oceanCanServe(d) || d.remaining <= 0) continue;
 
-      // Try FB first (cheaper than Air if enough volume)
-      if (fb) {
-        const fbLD = addDays(d.lDeadline, -fb.transitDays);
-        const fbBD = addDays(d.bDeadline, -fb.transitDays);
-        const fbDate = fbBD < fbLD ? fbBD : fbLD;
-        const fbWeeks = prod.filter(pw => pw.wk <= fbDate);
-        for (let wi = fbWeeks.length - 1; wi >= 0 && (d.bNeed > 0 || d.lNeed > 0); wi--) {
-          const a = availAt(fbWeeks[wi].wk);
-          if (a.lS < pal.lidPP && a.bS < pal.basePP) continue;
-          for (const ckKey of ["20HC", "40HC"]) {
-            const ck = cont[ckKey];
-            const maxP = ck.pallets, minP = ck.minPal || (maxP <= 10 ? 8 : 16);
-            const r = packOne(Math.min(a.bS, d.bNeed), Math.min(a.lS, d.lNeed), maxP, minP, pal.basePP, pal.lidPP);
-            if (!r) continue;
-            const airEquiv = r.bQ * airCost.base + r.lQ * airCost.lid;
-            if (ck.cost >= airEquiv) continue; // Air cheaper, skip FB
-            const arrDate = addDays(fbWeeks[wi].wk, fb.transitDays);
-            res.push({ mo: d.mo, meth: "Fast Boat", cn: ck.label,
-              bQ: r.bQ, lQ: r.lQ, tQ: r.bQ + r.lQ, cost: ck.cost,
-              bSd: new Date(fbWeeks[wi].wk), lSd: new Date(fbWeeks[wi].wk),
-              bAr: arrDate, lAr: arrDate, preShip: false, bPal: r.bPallets, lPal: r.lPallets });
-            drawFrom(fbWeeks[wi].wk, r.bQ, r.lQ);
-            d.bNeed -= r.bQ; d.lNeed -= r.lQ;
-            break;
-          }
+      const maxOcean  = maxOceanDelivery(d);
+      const shortfall = Math.max(0, d.remaining - maxOcean);
+      if (shortfall <= 0) continue;
+
+      const oceanBy = addDays(d.bDL, -oc.transitDays);
+      const fbBy    = addDays(d.bDL, -fb.transitDays);
+      let reserved  = 0;
+
+      for (const ckKey of ["40HC", "20HC"]) {
+        const ck = cont[ckKey]; if (!ck) continue;
+        while (reserved < shortfall) {
+          const { bS, lS } = availAt(fbBy);
+          const need = shortfall - reserved;
+          const r = packCont(Math.min(bS, need), Math.min(lS, need), ckKey);
+          if (!r) break;
+          const airEq = r.bQ * airCost.base + r.lQ * airCost.lid;
+          if (ck.cost >= airEq) break;
+          // Draw newest-first from FB-only window to preserve Ocean's buckets
+          drawNewest(oceanBy, fbBy, r.bQ, r.lQ);
+          const qty = r.bQ + r.lQ;
+          reserved += qty;
+          d.remaining -= Math.min(qty, d.remaining);
+          res.push({ mo: d.mo, meth: "Fast Boat", cn: ck.label, bQ: r.bQ, lQ: r.lQ,
+            tQ: qty, cost: ck.cost,
+            bSd: new Date(fbBy), lSd: new Date(fbBy),
+            bAr: addDays(fbBy, fb.transitDays), lAr: addDays(fbBy, fb.transitDays),
+            bPal: r.bPal, lPal: r.lPal });
         }
       }
 
-      // Air for whatever FB couldn't cover — ship bases and lids independently
-      // because they have different lead times and Air doesn't require containers
-      if (d.bNeed > 0 || d.lNeed > 0) {
-        const bSD = addDays(d.bDeadline, -ar.transitDays);
-        const lSD = addDays(d.lDeadline, -ar.transitDays);
-        // Ship bases on base deadline
-        if (d.bNeed > 0) {
-          const aB = availAt(bSD);
-          let bShip = Math.max(0, Math.min(d.bNeed, aB.bS));
-          if (bShip > 0 && aB.bS >= abPP) bShip = Math.min(Math.ceil(bShip / abPP) * abPP, aB.bS);
-          if (bShip > 0) {
-            res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: bShip, lQ: 0, tQ: bShip,
-              cost: bShip * airCost.base,
-              bSd: new Date(bSD), lSd: new Date(bSD),
-              bAr: addDays(bSD, ar.transitDays), lAr: addDays(bSD, ar.transitDays),
-              bPal: Math.ceil(bShip / abPP), lPal: 0, preShip: false });
-            drawFrom(bSD, bShip, 0);
-            d.bNeed -= bShip;
-          }
-        }
-        // Ship lids on lid deadline
-        if (d.lNeed > 0) {
-          const aL = availAt(lSD);
-          let lShip = Math.max(0, Math.min(d.lNeed, aL.lS));
-          if (lShip > 0 && aL.lS >= alPP) lShip = Math.min(Math.ceil(lShip / alPP) * alPP, aL.lS);
-          if (lShip > 0) {
-            res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: 0, lQ: lShip, tQ: lShip,
-              cost: lShip * airCost.lid,
-              bSd: new Date(lSD), lSd: new Date(lSD),
-              bAr: addDays(lSD, ar.transitDays), lAr: addDays(lSD, ar.transitDays),
-              bPal: 0, lPal: Math.ceil(lShip / alPP), preShip: false });
-            drawFrom(lSD, 0, lShip);
-            d.lNeed -= lShip;
-          }
+      // Air for anything FB couldn't cover in this pre-reserve pass
+      if (reserved < shortfall && ar) {
+        const airBy = addDays(d.bDL, -ar.transitDays);
+        const { bS, lS } = availAt(airBy);
+        const need = shortfall - reserved;
+        const bShip = Math.min(need, bS);
+        const lShip = Math.min(Math.max(0, need - bShip), lS);
+        const qty = bShip + lShip;
+        if (qty > 0) {
+          drawFrom(airBy, bShip, lShip);
+          d.remaining -= Math.min(qty, d.remaining);
+          res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: bShip, lQ: lShip,
+            tQ: qty, cost: bShip * airCost.base + lShip * airCost.lid,
+            bSd: new Date(airBy), lSd: new Date(airBy),
+            bAr: addDays(airBy, ar.transitDays), lAr: addDays(airBy, ar.transitDays),
+            bPal: 0, lPal: 0 });
         }
       }
     }
   }
 
-  // ── PHASE 1 — Ocean (free full containers) ──────────────────────
-  // Iterate FORWARD through production weeks so containers ship as soon as
-  // inventory fills one — no batching, no deadline-driven aggregation.
+  // ── PHASE 2: Production-Forward Ocean ─────────────────────────
+  // Walk forward week by week. The moment buckets contain enough for
+  // a full container AND there's remaining demand the arrival can serve,
+  // ship immediately. Never hold a full container's worth at the factory.
   if (oc) {
-    // Pass 1a: fill containers using base deadline (tighter)
-    for (const d of demands) {
-      const ocBD = addDays(d.bDeadline, -oc.transitDays);
-      const validWeeks = prod.filter(pw => pw.wk <= ocBD);
-      for (let i = 0; i < validWeeks.length && (d.bNeed > 0 || d.lNeed > 0); i++) {
-        fillAt("Standard Ocean", d, validWeeks[i].wk, oc.transitDays, d.bNeed, d.lNeed, false, false, null);
-      }
-    }
-    // Pass 1b: lids have shorter lead time — extra Ocean window for lid-only containers
-    for (const d of demands) {
-      if (d.lNeed <= 0) continue;
-      const ocLD = addDays(d.lDeadline, -oc.transitDays);
-      const ocBD = addDays(d.bDeadline, -oc.transitDays);
-      if (ocLD <= ocBD) continue;
-      const extraWeeks = prod.filter(pw => pw.wk > ocBD && pw.wk <= ocLD);
-      for (let i = 0; i < extraWeeks.length && d.lNeed > 0; i++) {
-        fillAt("Standard Ocean", d, extraWeeks[i].wk, oc.transitDays, padBases, d.lNeed, false, true, null);
-      }
-    }
+    for (const wk of prod) {
+      if (wk.bW === 0 && wk.lW === 0) continue;
+      const totalRem = demands.reduce((s, d) => s + d.remaining, 0);
+      if (totalRem <= 0) break;
 
-  }
+      const shipDate = wk.wk;
+      const arrDate  = addDays(shipDate, oc.transitDays);
 
-  // ── PHASE 2 — Fast Boat lids (multi-week scan, cost-checked) ────
-  if (fb) {
-    for (const d of demands) {
-      if (d.lNeed <= 0 || d.lNeed < pal.lidPP) continue;
-      const lSD = addDays(d.lDeadline, -fb.transitDays);
-      const fbWeeks = prod.filter(pw => pw.wk <= lSD);
-      for (let wi = fbWeeks.length - 1; wi >= 0 && d.lNeed >= pal.lidPP; wi--) {
-        const shipDate = fbWeeks[wi].wk;
-        const a = availAt(shipDate);
-        if (a.lS < pal.lidPP) continue;
-        const bMaxFB = Math.max(d.bNeed, padBases);
-        let remB = Math.min(a.bS, bMaxFB);
-        let remL = Math.min(a.lS, d.lNeed);
-        for (const ckKey of ["40HC", "20HC"]) {
-          const ck = cont[ckKey];
-          const maxPal = ck.pallets;
-          const minPal = ck.minPal || (maxPal <= 10 ? 8 : 16);
-          while (d.lNeed >= pal.lidPP && remL >= pal.lidPP) {
-            const r = packOne(remB, remL, maxPal, minPal, pal.basePP, pal.lidPP, false);
-            if (!r || r.lQ === 0) break;
-            const airEquiv = (r.lQ * airCost.lid) + (r.bQ * airCost.base);
-            if (ck.cost >= airEquiv) break;
-            const arrDate = addDays(shipDate, fb.transitDays);
-            res.push({ mo: d.mo, meth: "Fast Boat", cn: ck.label,
-              bQ: r.bQ, lQ: r.lQ, tQ: r.bQ + r.lQ, cost: ck.cost,
-              bSd: new Date(shipDate), lSd: new Date(shipDate), bAr: arrDate, lAr: arrDate,
-              preShip: false, bPal: r.bPallets, lPal: r.lPallets });
-            drawFrom(shipDate, r.bQ, r.lQ);
-            d.bNeed -= r.bQ; d.lNeed -= r.lQ;
-            remB -= r.bQ; remL -= r.lQ;
-            const a2 = availAt(shipDate);
-            remB = Math.min(a2.bS, Math.max(0, Math.max(d.bNeed, padBases)));
-            remL = Math.min(a2.lS, Math.max(0, d.lNeed));
+      // Skip if no demand month can benefit from this arrival
+      const futRem = demands.filter(d => d.bDL >= arrDate && d.remaining > 0)
+                            .reduce((s, d) => s + d.remaining, 0);
+      if (futRem <= 0) continue;
+
+      for (const ckKey of ["40HC", "20HC"]) {
+        const ck = cont[ckKey]; if (!ck) continue;
+        while (true) {
+          const totalR = demands.reduce((s, d) => s + d.remaining, 0);
+          if (totalR <= 0) break;
+          const { bS, lS } = availAt(shipDate);
+          const r = packCont(Math.min(bS, totalR), Math.min(lS, totalR), ckKey);
+          if (!r) break;
+          const futR2 = demands.filter(d => d.bDL >= arrDate && d.remaining > 0)
+                               .reduce((s, d) => s + d.remaining, 0);
+          if (futR2 <= 0) break;
+
+          drawFrom(shipDate, r.bQ, r.lQ);
+
+          // Allocate to earliest eligible demand months (for tracking remaining)
+          let toAlloc = r.bQ + r.lQ;
+          for (const d of demands) {
+            if (toAlloc <= 0) break;
+            if (d.remaining <= 0 || d.bDL < arrDate) continue;
+            const a = Math.min(d.remaining, toAlloc);
+            d.remaining -= a; toAlloc -= a;
           }
+
+          res.push({ mo: demands.find(d => d.bDL >= arrDate)?.mo ?? 0,
+            meth: "Standard Ocean", cn: ck.label,
+            bQ: r.bQ, lQ: r.lQ, tQ: r.bQ + r.lQ, cost: 0,
+            bSd: new Date(shipDate), lSd: new Date(shipDate),
+            bAr: new Date(arrDate), lAr: new Date(arrDate),
+            bPal: r.bPal, lPal: r.lPal });
         }
       }
     }
   }
 
-  // ── PHASE 3 — Fast Boat bases (cost-checked against ACTUAL available qty) ──
+  // ── PHASE 3: Fast Boat mop-up ─────────────────────────────────
   if (fb) {
     for (const d of demands) {
-      if (d.bNeed < pal.basePP) continue;
-      const bSD = addDays(d.bDeadline, -fb.transitDays);
-      const a = availAt(bSD);
-      const actualBasesAvail = Math.min(d.bNeed, a.bS);
-      if (actualBasesAvail < pal.basePP) continue;
-      const actualPals = Math.floor(actualBasesAvail / pal.basePP);
-      const actualUnits = actualPals * pal.basePP;
-      for (const ckKey of ["20HC", "40HC"]) {
-        if (d.bNeed <= 0) break;
-        const ck = cont[ckKey];
-        if (actualPals > ck.pallets) continue;
-        const fbPerUnit = ck.cost / actualUnits;
-        if (fbPerUnit >= airCost.base) continue; // Air is cheaper
-        const arrDate = addDays(bSD, fb.transitDays);
-        res.push({ mo: d.mo, meth: "Fast Boat", cn: ck.label,
-          bQ: actualUnits, lQ: 0, tQ: actualUnits, cost: ck.cost,
-          bSd: new Date(bSD), lSd: new Date(bSD),
-          bAr: arrDate, lAr: arrDate, preShip: false, bPal: actualPals, lPal: 0 });
-        drawFrom(bSD, actualUnits, 0);
-        d.bNeed -= actualUnits;
-        break;
+      if (d.remaining <= 0) continue;
+      const fbBy = addDays(d.bDL, -fb.transitDays);
+      for (const ckKey of ["40HC", "20HC"]) {
+        const ck = cont[ckKey]; if (!ck) continue;
+        while (d.remaining > 0) {
+          const { bS, lS } = availAt(fbBy);
+          const r = packCont(Math.min(bS, d.remaining), Math.min(lS, d.remaining), ckKey);
+          if (!r) break;
+          const airEq = r.bQ * airCost.base + r.lQ * airCost.lid;
+          if (ck.cost >= airEq) break;
+          drawFrom(fbBy, r.bQ, r.lQ);
+          const qty = r.bQ + r.lQ;
+          d.remaining -= Math.min(qty, d.remaining);
+          res.push({ mo: d.mo, meth: "Fast Boat", cn: ck.label, bQ: r.bQ, lQ: r.lQ,
+            tQ: qty, cost: ck.cost,
+            bSd: new Date(fbBy), lSd: new Date(fbBy),
+            bAr: addDays(fbBy, fb.transitDays), lAr: addDays(fbBy, fb.transitDays),
+            bPal: r.bPal, lPal: r.lPal });
+        }
       }
-      // Lid residuals NOT shipped via FB — fall through to Phase 4 Air.
     }
   }
 
-  // ── PHASE 4 — Air (production-constrained, independent base/lid deadlines) ──
+  // ── PHASE 4: Air — last resort ────────────────────────────────
   if (ar) {
-    const abPP = pal.airBasePP || 7500, alPP = pal.airLidPP || 25000;
     for (const d of demands) {
-      if (d.bNeed < 0) d.bNeed = 0;
-      if (d.lNeed < 0) d.lNeed = 0;
-      if (d.bNeed <= 0 && d.lNeed <= 0) continue;
-      const bSD = addDays(d.bDeadline, -ar.transitDays);
-      const lSD = addDays(d.lDeadline, -ar.transitDays);
-      // Ship bases on base deadline (arrives baseLeadDays before month)
-      if (d.bNeed > 0) {
-        const aB = availAt(bSD);
-        let bShip = Math.max(0, Math.min(d.bNeed, aB.bS));
-        if (bShip > 0 && aB.bS >= abPP) bShip = Math.min(Math.ceil(bShip / abPP) * abPP, aB.bS);
-        if (bShip > 0) {
-          res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: bShip, lQ: 0, tQ: bShip,
-            cost: bShip * airCost.base,
-            bSd: new Date(bSD), lSd: new Date(bSD),
-            bAr: addDays(bSD, ar.transitDays), lAr: addDays(bSD, ar.transitDays),
-            bPal: Math.ceil(bShip / abPP), lPal: 0, preShip: false });
-          drawFrom(bSD, bShip, 0);
-          d.bNeed -= bShip;
-        }
-      }
-      // Ship lids on lid deadline (arrives lidLeadDays before month)
-      if (d.lNeed > 0) {
-        const aL = availAt(lSD);
-        let lShip = Math.max(0, Math.min(d.lNeed, aL.lS));
-        if (lShip > 0 && aL.lS >= alPP) lShip = Math.min(Math.ceil(lShip / alPP) * alPP, aL.lS);
-        if (lShip > 0) {
-          res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: 0, lQ: lShip, tQ: lShip,
-            cost: lShip * airCost.lid,
-            bSd: new Date(lSD), lSd: new Date(lSD),
-            bAr: addDays(lSD, ar.transitDays), lAr: addDays(lSD, ar.transitDays),
-            bPal: 0, lPal: Math.ceil(lShip / alPP), preShip: false });
-          drawFrom(lSD, 0, lShip);
-          d.lNeed -= lShip;
-        }
-      }
+      if (d.remaining <= 0) continue;
+      const airBy = addDays(d.bDL, -ar.transitDays);
+      const { bS, lS } = availAt(airBy);
+      const bShip = Math.min(d.remaining, bS);
+      const lShip = Math.min(Math.max(0, d.remaining - bShip), lS);
+      const qty = bShip + lShip;
+      if (qty <= 0) continue;
+      drawFrom(airBy, bShip, lShip);
+      d.remaining -= qty;
+      res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: bShip, lQ: lShip,
+        tQ: qty, cost: bShip * airCost.base + lShip * airCost.lid,
+        bSd: new Date(airBy), lSd: new Date(airBy),
+        bAr: addDays(airBy, ar.transitDays), lAr: addDays(airBy, ar.transitDays),
+        bPal: 0, lPal: 0 });
     }
   }
 
-  // ── Sort and post-pass cleanup ──────────────────────────────────
-  const moOrder = { "Standard Ocean": 0, "Fast Boat": 1, "Air": 2 };
-  res.sort((a, b) => a.mo - b.mo || moOrder[a.meth] - moOrder[b.meth] || a.bSd - b.bSd);
-
-  // Remove Air shipments made redundant by cumulative surplus
-  {
-    const toRemove = new Set();
-    const moShipped = {};
-    for (const s of res) {
-      if (s.meth === "Air") continue;
-      if (!moShipped[s.mo]) moShipped[s.mo] = { b: 0, l: 0 };
-      moShipped[s.mo].b += s.bQ;
-      moShipped[s.mo].l += s.lQ;
-    }
-    let carryB = 0, carryL = 0;
-    const months = [...new Set(res.map(s => s.mo))].sort((a, b) => a - b);
-    for (const m of months) {
-      const shipped = moShipped[m] || { b: 0, l: 0 };
-      const dem = gld[m] || 0;
-      carryB += shipped.b;
-      carryL += shipped.l;
-      for (let i = 0; i < res.length; i++) {
-        const s = res[i];
-        if (s.mo !== m || s.meth !== "Air") continue;
-        const hasB = s.bQ > 0, hasL = s.lQ > 0;
-        const bCov = carryB >= dem;
-        const lCov = carryL >= dem;
-        if (hasB && hasL && bCov && lCov) { toRemove.add(i); }
-        else if (hasB && !hasL && bCov)   { toRemove.add(i); }
-        else if (hasL && !hasB && lCov)   { toRemove.add(i); }
-        else {
-          if (hasB) carryB += s.bQ;
-          if (hasL) carryL += s.lQ;
-        }
-      }
-      carryB = Math.max(0, carryB - dem);
-      carryL = Math.max(0, carryL - dem);
-    }
-    const removeList = [...toRemove].sort((a, b) => b - a);
-    for (const i of removeList) res.splice(i, 1);
-  }
-
-  res.sort((a, b) => a.mo - b.mo || moOrder[a.meth] - moOrder[b.meth] || a.bSd - b.bSd);
+  res.sort((a, b) => a.bSd - b.bSd);
   return res;
 }
 
