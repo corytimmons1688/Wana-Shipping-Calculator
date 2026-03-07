@@ -3,7 +3,7 @@ import { MO } from "../data/defaults";
 import { fm, f$, fC, dF } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 import { Bg } from "./Shared";
-import { optimize as runOptimize, calcGLD } from "../utils/calc";
+import { calcGLD } from "../utils/calc";
 
 // FIXED: safe date formatter - returns "—" for null/undefined instead of crashing
 function dFS(d) { return d ? dF(d) : "\u2014"; }
@@ -13,8 +13,6 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
   var sv = svState[0], setSv = svState[1];
   var hlState = useState(null);
   var hl = hlState[0], setHl = hlState[1];
-  var optState = useState(null); // null | "running" | {saved, original}
-  var optStatus = optState[0], setOptStatus = optState[1];
   // Inline editing state for existing shipments: { idx, field } | null
   var editingState = useState(null);
   var editing = editingState[0], setEditing = editingState[1];
@@ -29,87 +27,6 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
   var newLQ = newLQState[0], setNewLQ = newLQState[1];
   var newMoState = useState(4);
   var newMo = newMoState[0], setNewMo = newMoState[1];
-
-  var doOptimize = useCallback(function() {
-    if (!sc) return;
-    setOptStatus("running");
-    // Use setTimeout so the UI updates with "running" before the heavy computation
-    setTimeout(function() {
-      var mkts = JSON.parse(JSON.stringify(sc.markets));
-      var origGoLives = mkts.map(function(m) { return m.goLive; });
-
-      // Current baseline cost
-      function getCost(markets) {
-        var sh = runOptimize(markets, sc.molds, sc.shipping, sc.params, sc.containers, sc.pallet, sc.airCost);
-        var t = 0; for (var i = 0; i < sh.length; i++) t += sh[i].cost;
-        return t;
-      }
-      var baseCost = getCost(mkts);
-
-      // Build sort order: non-priority first, then array index, then lowest annual demand
-      var indices = [];
-      for (var i = 0; i < mkts.length; i++) {
-        if (mkts[i].goLive == null) continue; // skip markets with no go-live
-        var annDem = 0;
-        for (var m = 0; m < 12; m++) annDem += (mkts[i].demand[m] || 0);
-        indices.push({ idx: i, priority: mkts[i].priority ? 1 : 0, annDem: annDem });
-      }
-      indices.sort(function(a, b) {
-        if (a.priority !== b.priority) return a.priority - b.priority; // non-priority first
-        if (a.idx !== b.idx) return a.idx - b.idx; // array order
-        return a.annDem - b.annDem; // lowest demand first
-      });
-
-      // Greedy: for each market in order, try pushing goLive later to reduce cost
-      var improved = true;
-      var passes = 0;
-      while (improved && passes < 5) {
-        improved = false;
-        passes++;
-        for (var si = 0; si < indices.length; si++) {
-          var mktIdx = indices[si].idx;
-          var currentGL = mkts[mktIdx].goLive;
-          if (currentGL == null || currentGL >= 12) continue;
-          var bestGL = currentGL;
-          var bestCost = getCost(mkts);
-          // Try each later month
-          for (var tryGL = currentGL + 1; tryGL <= 12; tryGL++) {
-            mkts[mktIdx].goLive = tryGL;
-            var tryCost = getCost(mkts);
-            if (tryCost < bestCost) {
-              bestCost = tryCost;
-              bestGL = tryGL;
-            }
-          }
-          mkts[mktIdx].goLive = bestGL;
-          if (bestGL !== currentGL) improved = true;
-        }
-      }
-
-      var newCost = getCost(mkts);
-      var saved = baseCost - newCost;
-
-      // Build list of changes for display
-      var changes = [];
-      for (var ci = 0; ci < mkts.length; ci++) {
-        if (origGoLives[ci] !== mkts[ci].goLive) {
-          changes.push({ name: mkts[ci].name, from: origGoLives[ci], to: mkts[ci].goLive });
-        }
-      }
-
-      if (saved > 0) {
-        // Apply the optimized go-live months
-        upd(function(s) {
-          for (var ui = 0; ui < mkts.length; ui++) {
-            s.markets[ui].goLive = mkts[ui].goLive;
-          }
-        });
-        setOptStatus({ saved: saved, original: baseCost, optimized: newCost, changes: changes });
-      } else {
-        setOptStatus({ saved: 0, original: baseCost, optimized: baseCost, changes: [] });
-      }
-    }, 50);
-  }, [sc, upd]);
 
   // Use a ref for the live input value so commitEdit always reads the latest
   // value regardless of which render closure fires onBlur/onKeyDown.
@@ -336,15 +253,6 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
       </div>
 
       <div style={{ display:"flex", gap:8, marginBottom:12, alignItems:"center", flexWrap:"wrap" }}>
-        <button onClick={doOptimize} disabled={optStatus === "running"} style={{
-          padding:"8px 16px", borderRadius:6, border:"none", cursor: optStatus === "running" ? "default" : "pointer",
-          background: optStatus === "running" ? T.S2 : "linear-gradient(135deg, #16a34a, #15803d)",
-          color: optStatus === "running" ? T.T2 : "#fff", fontWeight:700, fontSize:12, fontFamily:"inherit",
-          boxShadow: optStatus === "running" ? "none" : "0 2px 8px rgba(22,163,74,0.3)",
-          transition:"all 0.2s"
-        }}>
-          {optStatus === "running" ? "⟳ Optimizing…" : "⚡ Optimize Shipping Cost"}
-        </button>
         {hasShipEdits && (
           <button onClick={function() { clearShipEdits(); }} style={{
             padding:"6px 14px", borderRadius:6, border:"1px solid #d97706", cursor:"pointer",
@@ -355,22 +263,6 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
           <span style={{ fontSize:11, color:T.AM, fontWeight:600 }}>
             ✎ {(sc.shipEdits || []).length} manual edit{(sc.shipEdits || []).length !== 1 ? "s" : ""} active
           </span>
-        )}
-        {optStatus && optStatus !== "running" && (
-          <div style={{ display:"flex", gap:12, alignItems:"center", padding:"6px 14px", borderRadius:6, background: optStatus.saved > 0 ? "#dcfce7" : T.S2, border:"1px solid "+(optStatus.saved > 0 ? "#16a34a" : T.BD) }}>
-            {optStatus.saved > 0 ? (
-              <span style={{ fontSize:12 }}>
-                <span style={{ color:"#16a34a", fontWeight:700 }}>Saved {f$(optStatus.saved)}</span>
-                <span style={{ color:T.T2 }}>{" \u2014 "}{f$(optStatus.original)}{" \u2192 "}{f$(optStatus.optimized)}</span>
-                {optStatus.changes.length > 0 && (
-                  <span style={{ color:T.T2, fontSize:10 }}>{" \u2014 Moved: "}{optStatus.changes.map(function(c) { return c.name + " " + MO[c.from - 1] + "\u2192" + MO[c.to - 1]; }).join(", ")}</span>
-                )}
-              </span>
-            ) : (
-              <span style={{ fontSize:12, color:T.T2 }}>Already optimal — no go-live changes reduce cost</span>
-            )}
-            <button onClick={function() { setOptStatus(null); }} style={{ background:"none", border:"none", color:T.T2, cursor:"pointer", fontSize:14, padding:0, lineHeight:1 }}>{"\u00d7"}</button>
-          </div>
         )}
       </div>
 
