@@ -348,7 +348,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
               <tr>
                 <th style={{ ...th, top:0, zIndex:3 }} rowSpan={2}>Week Of</th>
                 <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.GR, color:T.GR, top:0, zIndex:3, borderRight:"3px solid "+T.AC }} colSpan={6}>Production</th>
-                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC, top:0, zIndex:3 }} colSpan={5}>Shipping Out <span style={{fontSize:9,opacity:0.6}}>(↑ departs · ↓ arrives)</span></th>
+                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC, top:0, zIndex:3 }} colSpan={7}>Shipping Out <span style={{fontSize:9,opacity:0.6}}>(↑ departs · ↓ arrives)</span></th>
                 <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AM, color:T.AM, top:0, zIndex:3, borderLeft:"3px solid "+T.AM }} colSpan={7}>Inventory at Calyx</th>
               </tr>
               <tr>
@@ -361,6 +361,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                 <th style={{ ...th, textAlign:"left", fontSize:9, top:28, zIndex:2 }}>Method</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Bases</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lids</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>B Plt</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>L Plt</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Cost</th>
                 <th style={{ ...th, textAlign:"left", fontSize:9, top:28, zIndex:2 }}>Transit</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2, borderLeft:"3px solid "+T.AM }}>Base Arrived</th>
@@ -412,6 +414,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                           <input type="text" value={newLQ} onChange={function(e){setNewLQ(e.target.value);}}
                             style={{width:70,textAlign:"right",fontFamily:"inherit",fontSize:12,padding:"1px 4px",border:"1px solid "+T.AC,borderRadius:4}}/>
                         </td>,
+                        <td key="bp" style={{...td,textAlign:"right"}}></td>,
+                        <td key="lp" style={{...td,textAlign:"right"}}></td>,
                         <td key="t" style={{...td}} onClick={function(e){e.stopPropagation();}}>
                           <span style={{display:"flex",gap:4}}>
                             <button onClick={confirmAdd} style={{background:T.GR,border:"none",borderRadius:4,color:"#fff",fontSize:10,fontWeight:700,padding:"2px 7px",cursor:"pointer",fontFamily:"inherit"}}>✓</button>
@@ -428,6 +432,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                       </td>,
                       <td key="b" style={{ ...td, textAlign:"right" }}></td>,
                       <td key="l" style={{ ...td, textAlign:"right" }}></td>,
+                      <td key="bp" style={{ ...td, textAlign:"right" }}></td>,
+                      <td key="lp" style={{ ...td, textAlign:"right" }}></td>,
                       <td key="c" style={{ ...td, textAlign:"right" }}></td>,
                       <td key="t" style={td}></td>
                     ];
@@ -507,6 +513,13 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                       </td>
                     );
                   }
+                  var isAir = dep.meth === "Air";
+                  var bPP = isAir ? (sc.pallet.airBasePP || 7500) : (sc.pallet.basePP || 9072);
+                  var lPP = isAir ? (sc.pallet.airLidPP || 25000) : (sc.pallet.lidPP || 30720);
+                  var bPlt = dep.bQ > 0 ? (dep.bQ / bPP) : 0;
+                  var lPlt = dep.lQ > 0 ? (dep.lQ / lPP) : 0;
+                  var bPltTd = <td key="bp" style={{...td,textAlign:"right",color:T.GR,fontSize:11}}>{bPlt>0?bPlt.toFixed(1):""}</td>;
+                  var lPltTd = <td key="lp" style={{...td,textAlign:"right",color:T.AC,fontSize:11}}>{lPlt>0?lPlt.toFixed(1):""}</td>;
                   var costTd = <td key="c" style={{...td,textAlign:"right",color:dep.cost>0?T.AM:T.GR,fontWeight:600}}>{dep.cost===0?"FREE":f$(dep.cost)}</td>;
                   var transitTd = (
                     <td key="t" style={{...td,color:T.T2,fontSize:11,lineHeight:"1.5"}}>
@@ -516,7 +529,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                       </span>
                     </td>
                   );
-                  return [methTd, bTd, lTd, costTd, transitTd];
+                  return [methTd, bTd, lTd, bPltTd, lPltTd, costTd, transitTd];
                 }
 
                 var firstDepCells = makeDepCells(firstDepEntry, true);
@@ -559,7 +572,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                   addExtraRow = (
                     <tr key={"add"+i} style={{ background: i%2===0?"transparent":T.S2 }}>
                       <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={{ ...td, borderRight:prodBorderR }}></td>
-                      <td style={{...td}} colSpan={5}>
+                      <td style={{...td}} colSpan={7}>
                         <button onClick={function(e){e.stopPropagation(); openAdd(wkMs2, r.wk.getMonth());}}
                           style={{background:"none",border:"1px dashed "+T.BD,borderRadius:4,color:T.T2,fontSize:10,padding:"1px 7px",cursor:"pointer",fontFamily:"inherit",opacity:0.5}}
                           title="Add another shipment this week">+ Add</button>
@@ -591,6 +604,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                         <input type="text" value={newLQ} onChange={function(e){setNewLQ(e.target.value);}}
                           style={{width:70,textAlign:"right",fontFamily:"inherit",fontSize:12,padding:"1px 4px",border:"1px solid "+T.AC,borderRadius:4}}/>
                       </td>
+                      <td style={{...td,textAlign:"right"}}></td>
+                      <td style={{...td,textAlign:"right"}}></td>
                       <td style={{...td}} onClick={function(e){e.stopPropagation();}}>
                         <span style={{display:"flex",gap:4}}>
                           <button onClick={confirmAdd} style={{background:T.GR,border:"none",borderRadius:4,color:"#fff",fontSize:10,fontWeight:700,padding:"2px 7px",cursor:"pointer",fontFamily:"inherit"}}>✓</button>
@@ -618,16 +633,17 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
           </div>
           <table style={tbl}><thead><tr>
             <th style={th}>#</th><th style={th}>Mo.</th><th style={th}>Method</th><th style={th}>Container</th>
-            <th style={{ ...th, textAlign:"center" }}>Pallets</th>
             <th style={{ ...th, textAlign:"right", color:T.GR }}>Bases</th>
             <th style={{ ...th, textAlign:"right", color:T.AC }}>Lids</th>
+            <th style={{ ...th, textAlign:"right", color:T.GR }}>B Plt</th>
+            <th style={{ ...th, textAlign:"right", color:T.AC }}>L Plt</th>
             <th style={{ ...th, textAlign:"right" }}>Total</th>
             <th style={th}>Ship Date</th><th style={th}>Arrival</th>
             <th style={{ ...th, textAlign:"right" }}>Cost</th>
             <th style={{ ...th, textAlign:"right" }}>$/Unit</th>
             <th style={{ ...th, textAlign:"center" }}>Edit</th>
           </tr></thead><tbody>
-            {ships.length===0 && <tr><td colSpan={13} style={{ ...td, textAlign:"center", color:T.T2, padding:18 }}>No shipments</td></tr>}
+            {ships.length===0 && <tr><td colSpan={14} style={{ ...td, textAlign:"center", color:T.T2, padding:18 }}>No shipments</td></tr>}
             {ships.map(function(sh,i) {
               var cpu = sh.tQ>0 ? sh.cost/sh.tQ : 0;
               var isHl2 = hl === "d"+i;
@@ -714,9 +730,19 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                   <td style={{ ...td, fontWeight:600 }}>{MO[sh.mo]}</td>
                   {methCell}
                   <td style={{ ...td, color:T.T2, fontSize:11 }}>{sh.cn}</td>
-                  <td style={{ ...td, textAlign:"center", fontSize:10, color:T.T2 }}>{sh.bPal != null ? (sh.bPal + "B/" + sh.lPal + "L") : "\u2014"}</td>
                   {bCell}
                   {lCell}
+                  {(function() {
+                    var isAirD = sh.meth === "Air";
+                    var bPPd = isAirD ? (sc.pallet.airBasePP || 7500) : (sc.pallet.basePP || 9072);
+                    var lPPd = isAirD ? (sc.pallet.airLidPP || 25000) : (sc.pallet.lidPP || 30720);
+                    var bPd = sh.bQ > 0 ? (sh.bQ / bPPd) : 0;
+                    var lPd = sh.lQ > 0 ? (sh.lQ / lPPd) : 0;
+                    return [
+                      <td key="bp" style={{ ...td, textAlign:"right", color:T.GR, fontSize:11 }}>{bPd > 0 ? bPd.toFixed(1) : ""}</td>,
+                      <td key="lp" style={{ ...td, textAlign:"right", color:T.AC, fontSize:11 }}>{lPd > 0 ? lPd.toFixed(1) : ""}</td>
+                    ];
+                  })()}
                   <td style={{ ...td, textAlign:"right", fontWeight:700 }}>{fm(sh.tQ)}</td>
                   <td style={{ ...td, color:T.T2, fontSize:11 }}>{dFS(sh.bSd)}</td>
                   <td style={{ ...td, color:T.T2, fontSize:11 }}>{dFS(sh.bAr)}</td>
