@@ -8,6 +8,46 @@ import { calcGLD } from "../utils/calc";
 // FIXED: safe date formatter - returns "—" for null/undefined instead of crashing
 function dFS(d) { return d ? dF(d) : "\u2014"; }
 
+// Get cumulative production at a given date
+function prodAtDate(prodData, date) {
+  var best = null;
+  for (var i = 0; i < prodData.length; i++) {
+    if (prodData[i].wk <= date) best = prodData[i];
+  }
+  return best ? { bC: best.bC, lC: best.lC } : { bC: 0, lC: 0 };
+}
+
+// Max base/lid available for shipment at array index si, accounting for other shipments
+function maxAvailForShip(allShips, prodData, si) {
+  var s = allShips[si];
+  if (!s || !s.bSd || !prodData || prodData.length === 0) return { maxB: Infinity, maxL: Infinity };
+  var sd = s.bSd;
+  var p = prodAtDate(prodData, sd);
+  var commitB = 0, commitL = 0;
+  for (var j = 0; j < allShips.length; j++) {
+    if (j === si) continue;
+    if (allShips[j].bSd && allShips[j].bSd <= sd) {
+      commitB += allShips[j].bQ;
+      commitL += allShips[j].lQ;
+    }
+  }
+  return { maxB: Math.max(0, p.bC - commitB), maxL: Math.max(0, p.lC - commitL) };
+}
+
+// Max base/lid available for a NEW shipment at a given ship date
+function maxAvailForNewShip(allShips, prodData, shipDate) {
+  if (!shipDate || !prodData || prodData.length === 0) return { maxB: Infinity, maxL: Infinity };
+  var p = prodAtDate(prodData, shipDate);
+  var commitB = 0, commitL = 0;
+  for (var j = 0; j < allShips.length; j++) {
+    if (allShips[j].bSd && allShips[j].bSd <= shipDate) {
+      commitB += allShips[j].bQ;
+      commitL += allShips[j].lQ;
+    }
+  }
+  return { maxB: Math.max(0, p.bC - commitB), maxL: Math.max(0, p.lC - commitL) };
+}
+
 export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd, updShipEdit, addShipment, updShipAddition, removeShipAddition, deleteShipment, restoreShipment, clearShipEdits, hasShipEdits }) {
   var svState = useState("unified");
   var sv = svState[0], setSv = svState[1];
@@ -40,12 +80,16 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
   }
 
   // commitEditWith(idx, field, value) — explicit args, no closure dependency
+  // Clamps bQ/lQ to production on-hand so users can't ship more than available
   function commitEditWith(idx, field, value) {
     if (field === "meth") {
       if (METHODS.indexOf(value) >= 0) updShipEdit(idx, { meth: value });
     } else if (field === "bQ" || field === "lQ") {
       var n = parseInt(value.replace(/,/g, ""), 10);
       if (!isNaN(n) && n >= 0) {
+        var mx = maxAvailForShip(ships, prod, idx);
+        if (field === "bQ") n = Math.min(n, mx.maxB);
+        else n = Math.min(n, mx.maxL);
         var patch = {};
         patch[field] = n;
         updShipEdit(idx, patch);
@@ -80,6 +124,11 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
     if (!adding) return;
     var bNum = parseInt(newBQ.replace(/,/g, ""), 10) || 0;
     var lNum = parseInt(newLQ.replace(/,/g, ""), 10) || 0;
+    // Clamp to production on-hand at the ship date
+    var shipDate = new Date(adding.wkMs);
+    var mx = maxAvailForNewShip(ships, prod, shipDate);
+    bNum = Math.min(bNum, mx.maxB);
+    lNum = Math.min(lNum, mx.maxL);
     if (bNum > 0 || lNum > 0) {
       addShipment(adding.wkMs, newMo, newMeth, bNum, lNum);
     }
