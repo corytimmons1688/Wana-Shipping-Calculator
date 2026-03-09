@@ -90,9 +90,12 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
     } else if (field === "bQ" || field === "lQ") {
       var n = parseInt(value.replace(/,/g, ""), 10);
       if (!isNaN(n) && n >= 0) {
+        var currentShip = ships[idx];
+        var currentVal = currentShip ? (currentShip[field] || 0) : 0;
         var mx = maxAvailForShip(ships, prod, idx);
-        if (field === "bQ") n = Math.min(n, mx.maxB);
-        else n = Math.min(n, mx.maxL);
+        var cap = field === "bQ" ? mx.maxB : mx.maxL;
+        cap = Math.max(cap, currentVal);
+        n = Math.min(n, cap);
         var patch = {};
         patch[field] = n;
         if (addId) updShipAddition(addId, patch);
@@ -640,7 +643,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                       onChange={function(e) {
                         var v = e.target.value;
                         editValRef.current = v;
-                        commitEditWith(i, "meth", v);
+                        commitEditWith(i, "meth", v, sh.isAddition ? sh.addId : undefined);
                       }}
                       onKeyDown={function(e) { if (e.key === "Escape") { e.stopPropagation(); cancelEdit(); } }}
                       style={{ fontFamily:"inherit", fontSize:11, padding:"2px 4px", border:"1px solid "+T.AC, borderRadius:4, background:"#fff", cursor:"pointer" }}>
@@ -650,7 +653,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                 );
               } else {
                 methCell = (
-                  <td style={{ ...td, cursor:"pointer" }} onClick={function(e) { e.stopPropagation(); startEdit(i, "meth", sh.meth); }}>
+                  <td style={{ ...td, cursor:"pointer" }} onClick={function(e) { e.stopPropagation(); startEdit(i, "meth", sh.meth, sh.isAddition ? sh.addId : undefined); }}>
                     <span title="Click to change method"><Bg method={sh.meth}/></span>
                     {sh.preShip && <span style={{ marginLeft:4, fontSize:8, color:T.GR, fontWeight:700 }}>PRE</span>}
                     {sh.lateDelivery && <span style={{ marginLeft:4, fontSize:8, color:"#dc2626", fontWeight:700 }}>LATE</span>}
@@ -674,7 +677,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
               } else {
                 bCell = (
                   <td style={{ ...td, textAlign:"right", color:T.GR, fontWeight:600, cursor:"pointer" }}
-                    onClick={function(e) { e.stopPropagation(); startEdit(i, "bQ", sh.bQ); }}
+                    onClick={function(e) { e.stopPropagation(); startEdit(i, "bQ", sh.bQ, sh.isAddition ? sh.addId : undefined); }}
                     title="Click to edit bases quantity">
                     {fm(sh.bQ)}
                   </td>
@@ -696,7 +699,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
               } else {
                 lCell = (
                   <td style={{ ...td, textAlign:"right", color:T.AC, fontWeight:600, cursor:"pointer" }}
-                    onClick={function(e) { e.stopPropagation(); startEdit(i, "lQ", sh.lQ); }}
+                    onClick={function(e) { e.stopPropagation(); startEdit(i, "lQ", sh.lQ, sh.isAddition ? sh.addId : undefined); }}
                     title="Click to edit lids quantity">
                     {fm(sh.lQ)}
                   </td>
