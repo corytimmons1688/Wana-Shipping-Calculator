@@ -74,16 +74,19 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
 
   var METHODS = ["Standard Ocean", "Fast Boat", "Air"];
 
-  function startEdit(idx, field, curVal) {
+  function startEdit(idx, field, curVal, addId) {
     editValRef.current = String(curVal);
-    setEditing({ idx: idx, field: field });
+    setEditing({ idx: idx, field: field, addId: addId || null });
   }
 
   // commitEditWith(idx, field, value) — explicit args, no closure dependency
   // Clamps bQ/lQ to production on-hand so users can't ship more than available
-  function commitEditWith(idx, field, value) {
+  function commitEditWith(idx, field, value, addId) {
     if (field === "meth") {
-      if (METHODS.indexOf(value) >= 0) updShipEdit(idx, { meth: value });
+      if (METHODS.indexOf(value) >= 0) {
+        if (addId) updShipAddition(addId, { meth: value });
+        else updShipEdit(idx, { meth: value });
+      }
     } else if (field === "bQ" || field === "lQ") {
       var n = parseInt(value.replace(/,/g, ""), 10);
       if (!isNaN(n) && n >= 0) {
@@ -92,7 +95,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
         else n = Math.min(n, mx.maxL);
         var patch = {};
         patch[field] = n;
-        updShipEdit(idx, patch);
+        if (addId) updShipAddition(addId, patch);
+        else updShipEdit(idx, patch);
       }
     }
     setEditing(null);
@@ -100,7 +104,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
 
   function commitFromRef() {
     if (!editing) return;
-    commitEditWith(editing.idx, editing.field, editValRef.current);
+    commitEditWith(editing.idx, editing.field, editValRef.current, editing.addId);
   }
 
   function cancelEdit() { setEditing(null); }
@@ -430,11 +434,11 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                   var edited = !isAdditionEntry && isEdited(depIdx);
                   // Method cell
                   var methTd;
-                  if (!isAdditionEntry && editing && editing.idx === depIdx && editing.field === "meth") {
+                  if (editing && editing.idx === depIdx && editing.field === "meth") {
                     methTd = (
                       <td key="m" style={td} onClick={function(e){e.stopPropagation();}}>
                         <select autoFocus value={editValRef.current}
-                          onChange={function(e) { var v=e.target.value; editValRef.current=v; commitEditWith(depIdx,"meth",v); }}
+                          onChange={function(e) { var v=e.target.value; editValRef.current=v; commitEditWith(depIdx,"meth",v, isAdditionEntry ? dep.addId : undefined); }}
                           onKeyDown={function(e){if(e.key==="Escape"){e.stopPropagation();cancelEdit();}}}
                           style={{fontFamily:"inherit",fontSize:11,padding:"2px 4px",border:"1px solid "+T.AC,borderRadius:4,background:"#fff"}}>
                           {METHODS.map(function(m){return <option key={m} value={m}>{m}</option>;})}
@@ -443,8 +447,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                     );
                   } else {
                     methTd = (
-                      <td key="m" style={{...td, cursor: isAdditionEntry ? "default" : "pointer"}}
-                        onClick={isAdditionEntry ? undefined : function(e){e.stopPropagation(); startEdit(depIdx,"meth",dep.meth);}}>
+                      <td key="m" style={{...td, cursor:"pointer"}}
+                        onClick={function(e){e.stopPropagation(); startEdit(depIdx,"meth",dep.meth, isAdditionEntry ? dep.addId : undefined);}}>
                         <Bg method={dep.meth}/>
                         {edited && <span style={{marginLeft:3,fontSize:8,color:T.AM,fontWeight:700}}>✎</span>}
                         {isAdditionEntry && (
@@ -462,7 +466,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                   }
                   // Bases cell
                   var bTd;
-                  if (!isAdditionEntry && editing && editing.idx === depIdx && editing.field === "bQ") {
+                  if (editing && editing.idx === depIdx && editing.field === "bQ") {
                     bTd = (
                       <td key="b" style={{...td,textAlign:"right"}} onClick={function(e){e.stopPropagation();}}>
                         <input autoFocus type="text" defaultValue={String(dep.bQ)}
@@ -473,16 +477,16 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                     );
                   } else {
                     bTd = (
-                      <td key="b" style={{...td,textAlign:"right",color:T.GR,fontWeight:600,cursor:isAdditionEntry?"default":"pointer"}}
-                        onClick={isAdditionEntry ? undefined : function(e){e.stopPropagation(); startEdit(depIdx,"bQ",dep.bQ);}}
-                        title={isAdditionEntry ? "" : "Click to edit bases"}>
+                      <td key="b" style={{...td,textAlign:"right",color:T.GR,fontWeight:600,cursor:"pointer"}}
+                        onClick={function(e){e.stopPropagation(); startEdit(depIdx,"bQ",dep.bQ, isAdditionEntry ? dep.addId : undefined);}}
+                        title="Click to edit bases">
                         {dep.bQ > 0 ? fm(dep.bQ) : ""}
                       </td>
                     );
                   }
                   // Lids cell
                   var lTd;
-                  if (!isAdditionEntry && editing && editing.idx === depIdx && editing.field === "lQ") {
+                  if (editing && editing.idx === depIdx && editing.field === "lQ") {
                     lTd = (
                       <td key="l" style={{...td,textAlign:"right"}} onClick={function(e){e.stopPropagation();}}>
                         <input autoFocus type="text" defaultValue={String(dep.lQ)}
@@ -493,9 +497,9 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                     );
                   } else {
                     lTd = (
-                      <td key="l" style={{...td,textAlign:"right",color:T.AC,fontWeight:600,cursor:isAdditionEntry?"default":"pointer"}}
-                        onClick={isAdditionEntry ? undefined : function(e){e.stopPropagation(); startEdit(depIdx,"lQ",dep.lQ);}}
-                        title={isAdditionEntry ? "" : "Click to edit lids"}>
+                      <td key="l" style={{...td,textAlign:"right",color:T.AC,fontWeight:600,cursor:"pointer"}}
+                        onClick={function(e){e.stopPropagation(); startEdit(depIdx,"lQ",dep.lQ, isAdditionEntry ? dep.addId : undefined);}}
+                        title="Click to edit lids">
                         {dep.lQ > 0 ? fm(dep.lQ) : ""}
                       </td>
                     );
