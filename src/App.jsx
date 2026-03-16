@@ -14,6 +14,8 @@ export default function App() {
   const [scenarios, setScenarios] = useState(() => [mkScenario("Base Plan", initScenario()), mkScenario("Colorado Option 2", initScenarioCOOpt2())]);
   const [active, setActive] = useState(0);
   const [cmp, setCmp] = useState(false);
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dropIdx, setDropIdx] = useState(null);
   const sc = scenarios[active];
   const upd = useCallback(fn => { setScenarios(p => { const nx = dc(p); fn(nx[active]); return nx; }); }, [active]);
   const gld = useMemo(() => calcGLD(sc.markets), [sc]);
@@ -141,6 +143,11 @@ export default function App() {
   const dupeSc = () => { const ns = mkScenario(sc.name + " (copy)", sc); setScenarios(p => [...p, ns]); setActive(scenarios.length); };
   const delSc = (idx) => { if (scenarios.length <= 1) return; setScenarios(p => p.filter((_, i) => i !== idx)); setActive(a => idx < a ? a - 1 : idx === a ? Math.min(a, scenarios.length - 2) : a); };
   const renameSc = (idx, name) => { setScenarios(p => p.map((s, i) => i === idx ? { ...s, name } : s)); };
+  const reorderSc = (from, to) => {
+    if (from === to) return;
+    setScenarios(p => { const nx = [...p]; const [moved] = nx.splice(from, 1); nx.splice(to, 0, moved); return nx; });
+    setActive(a => { if (a === from) return to; if (from < a && to >= a) return a - 1; if (from > a && to <= a) return a + 1; return a; });
+  };
   const { status: syncStatus, error: syncError } = useSupabase(scenarios, setScenarios);
   const [renaming, setRenaming] = useState(null);
   const [renameVal, setRenameVal] = useState("");
@@ -165,8 +172,8 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"shipping", l:
         </div>
       </div>
       <div style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 18px", background:T.S2, borderBottom:"1px solid "+T.BD, flexWrap:"wrap" }}>
-        {scenarios.map((s, i) => { const a = i === active; return (
-          <div key={s.id} style={{ display:"inline-flex", alignItems:"center", position:"relative" }}>
+        {scenarios.map((s, i) => { const a = i === active; const isDragging = dragIdx === i; const isDropBefore = dropIdx === i && dragIdx !== i && dragIdx !== i - 1; const isDropAfter = dropIdx === i + 1 && dragIdx !== i && dragIdx !== i + 1; return (
+          <div key={s.id} draggable={renaming !== i} onDragStart={e => { setDragIdx(i); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { if (dragIdx != null && dropIdx != null && dragIdx !== dropIdx) { const to = dropIdx > dragIdx ? dropIdx - 1 : dropIdx; reorderSc(dragIdx, to); } setDragIdx(null); setDropIdx(null); }} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; const rect = e.currentTarget.getBoundingClientRect(); const mid = rect.left + rect.width / 2; setDropIdx(e.clientX < mid ? i : i + 1); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDropIdx(null); }} style={{ display:"inline-flex", alignItems:"center", position:"relative", opacity: isDragging ? 0.4 : 1, borderLeft: isDropBefore ? "3px solid "+T.AC : "3px solid transparent", borderRight: isDropAfter ? "3px solid "+T.AC : "3px solid transparent", transition:"border-color 0.15s", cursor: renaming === i ? "default" : "grab" }}>
             {renaming === i ? (
               <input autoFocus value={renameVal} onChange={e => setRenameVal(e.target.value)} onBlur={() => { if (renameVal.trim()) renameSc(i, renameVal.trim()); setRenaming(null); }} onKeyDown={e => { if (e.key === "Enter") { if (renameVal.trim()) renameSc(i, renameVal.trim()); setRenaming(null); } if (e.key === "Escape") setRenaming(null); }} style={{ padding:"3px 8px", borderRadius:5, border:"1px solid "+T.AC, background:T.S1, color:T.AC, fontSize:11, fontWeight:700, fontFamily:"inherit", width: Math.max(80, renameVal.length * 7), outline:"none" }} />
             ) : (
