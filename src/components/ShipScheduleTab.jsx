@@ -8,13 +8,13 @@ var GROUPS = ["Black Sparkle", "White"];
 var GROUP_COLORS = { "Black Sparkle": { hd: "#1a1a2e", tx: "#fff" }, "White": { hd: "#6b7280", tx: "#fff" } };
 var METHOD_COLORS = { "Standard Ocean": T.GR, "Fast Boat": T.AC, "Air": T.AM };
 
-// Build weekly SKU ship schedule from displayShips + skuDemand
+// Build weekly schedule: bQ → base types, lQ → lid SKUs
 function buildSchedule(ships, skuDemand) {
-  if (!ships || ships.length === 0) return { weeks: [], bySku: {} };
+  if (!ships || ships.length === 0) return { weeks: [], byBase: {}, byLid: {} };
 
   var allSkus = Object.keys(skuDemand);
 
-  // Pre-compute annual demand per SKU (fallback for months with zero demand)
+  // Pre-compute annual demand per lid SKU
   var annualDem = {};
   var totalAnnualDem = 0;
   for (var ai = 0; ai < allSkus.length; ai++) {
@@ -25,7 +25,26 @@ function buildSchedule(ships, skuDemand) {
     totalAnnualDem += annSum;
   }
 
-  // Snap date to the production-week grid (every 7 days from Mar 9 2026)
+  // Pre-compute demand per base type (sum of their associated lid SKU demands)
+  var baseAnnual = {};
+  var baseMonthly = {};
+  var totalBaseAnnual = 0;
+  for (var bgi = 0; bgi < GROUPS.length; bgi++) {
+    var gName = GROUPS[bgi];
+    var gSkus = MASTER_SKUS.filter(function(s) { return s.base === gName; });
+    var gAnn = 0;
+    var gMo = new Array(12).fill(0);
+    for (var gsi = 0; gsi < gSkus.length; gsi++) {
+      gAnn += (annualDem[gSkus[gsi].sku] || 0);
+      var dem = skuDemand[gSkus[gsi].sku];
+      if (dem) for (var m = 0; m < 12; m++) gMo[m] += (dem[m] || 0);
+    }
+    baseAnnual[gName] = gAnn;
+    baseMonthly[gName] = gMo;
+    totalBaseAnnual += gAnn;
+  }
+
+  // Snap date to production-week grid (every 7 days from Mar 9 2026)
   var PROD_START = new Date(2026, 2, 9).getTime();
   var WEEK_MS = 7 * 86400000;
   function snapToProductionWeek(date) {
@@ -35,8 +54,7 @@ function buildSchedule(ships, skuDemand) {
     return new Date(PROD_START + wkIdx * WEEK_MS);
   }
 
-  // Group shipments by production week (same grid as unified view)
-  // Include shipments with bQ > 0 OR lQ > 0
+  // Group shipments by production week
   var weekMap = {};
   for (var i = 0; i < ships.length; i++) {
     var sh = ships[i];
@@ -52,65 +70,77 @@ function buildSchedule(ships, skuDemand) {
   var weeks = [];
   for (var wi = 0; wi < weekKeys.length; wi++) weeks.push(weekMap[weekKeys[wi]]);
 
-  var bySku = {};
-  for (var si = 0; si < allSkus.length; si++) bySku[allSkus[si]] = new Array(weeks.length).fill(0);
+  // Initialize byBase (bQ allocation) and byLid (lQ allocation)
+  var byBase = {};
+  for (var bi = 0; bi < GROUPS.length; bi++) byBase[GROUPS[bi]] = new Array(weeks.length).fill(0);
+  var byLid = {};
+  for (var li = 0; li < allSkus.length; li++) byLid[allSkus[li]] = new Array(weeks.length).fill(0);
 
   for (var wki = 0; wki < weeks.length; wki++) {
     var wkShips = weeks[wki].shipments;
     for (var shi = 0; shi < wkShips.length; shi++) {
       var s = wkShips[shi];
-      if (s.bQ <= 0) continue; // SKU allocation only for bases
-
-      // Use ARRIVAL month for proportions
       var arrMo = s.bAr ? s.bAr.getMonth() : (s.mo != null ? s.mo : -1);
 
-      var useMonthly = false;
-      var totalDem = 0;
-      if (arrMo >= 0 && arrMo <= 11) {
-        for (var ski = 0; ski < allSkus.length; ski++) {
-          var dem = skuDemand[allSkus[ski]];
-          if (dem) totalDem += (dem[arrMo] || 0);
+      // === BASES: Allocate bQ to base types (Black Sparkle / White) ===
+      if (s.bQ > 0) {
+        var useMoB = false;
+        var totBDem = 0;
+        if (arrMo >= 0 && arrMo <= 11) {
+          for (var bk1 = 0; bk1 < GROUPS.length; bk1++) totBDem += (baseMonthly[GROUPS[bk1]][arrMo] || 0);
+          if (totBDem > 0) useMoB = true;
         }
-        if (totalDem > 0) useMonthly = true;
+        if (!useMoB) totBDem = totalBaseAnnual;
+        if (totBDem > 0) {
+          var bAlloc = 0, bArr = [];
+          for (var bk2 = 0; bk2 < GROUPS.length; bk2++) {
+            var bDem = useMoB ? (baseMonthly[GROUPS[bk2]][arrMo] || 0) : baseAnnual[GROUPS[bk2]];
+            var bSh = Math.round(s.bQ * bDem / totBDem);
+            bArr.push(bSh); bAlloc += bSh;
+          }
+          var bRem = s.bQ - bAlloc;
+          if (bRem !== 0) { var bMx = 0; for (var bf = 1; bf < bArr.length; bf++) if (bArr[bf] > bArr[bMx]) bMx = bf; bArr[bMx] += bRem; }
+          for (var bk3 = 0; bk3 < GROUPS.length; bk3++) byBase[GROUPS[bk3]][wki] += bArr[bk3];
+        }
       }
-      if (!useMonthly) totalDem = totalAnnualDem;
-      if (totalDem <= 0) continue;
 
-      var allocated = 0;
-      var skuAllocs = [];
-      for (var ski2 = 0; ski2 < allSkus.length; ski2++) {
-        var skuCode = allSkus[ski2];
-        var skuDem = useMonthly
-          ? ((skuDemand[skuCode] && skuDemand[skuCode][arrMo]) || 0)
-          : (annualDem[skuCode] || 0);
-        if (skuDem <= 0) { skuAllocs.push(0); continue; }
-        var share = Math.round(s.bQ * skuDem / totalDem);
-        skuAllocs.push(share);
-        allocated += share;
-      }
-      var remainder = s.bQ - allocated;
-      if (remainder !== 0) {
-        var maxIdx = 0, maxVal = 0;
-        for (var fi = 0; fi < skuAllocs.length; fi++) {
-          if (skuAllocs[fi] > maxVal) { maxVal = skuAllocs[fi]; maxIdx = fi; }
+      // === LIDS: Allocate lQ to individual lid SKUs ===
+      if (s.lQ > 0) {
+        var useMoL = false;
+        var totLDem = 0;
+        if (arrMo >= 0 && arrMo <= 11) {
+          for (var lk1 = 0; lk1 < allSkus.length; lk1++) {
+            var ld = skuDemand[allSkus[lk1]];
+            if (ld) totLDem += (ld[arrMo] || 0);
+          }
+          if (totLDem > 0) useMoL = true;
         }
-        skuAllocs[maxIdx] += remainder;
-      }
-      for (var ski3 = 0; ski3 < allSkus.length; ski3++) {
-        if (!bySku[allSkus[ski3]]) bySku[allSkus[ski3]] = new Array(weeks.length).fill(0);
-        bySku[allSkus[ski3]][wki] += skuAllocs[ski3];
+        if (!useMoL) totLDem = totalAnnualDem;
+        if (totLDem > 0) {
+          var lAlloc = 0, lArr = [];
+          for (var lk2 = 0; lk2 < allSkus.length; lk2++) {
+            var skuCode = allSkus[lk2];
+            var lDem = useMoL ? ((skuDemand[skuCode] && skuDemand[skuCode][arrMo]) || 0) : (annualDem[skuCode] || 0);
+            if (lDem <= 0) { lArr.push(0); continue; }
+            var lSh = Math.round(s.lQ * lDem / totLDem);
+            lArr.push(lSh); lAlloc += lSh;
+          }
+          var lRem = s.lQ - lAlloc;
+          if (lRem !== 0) { var lMx = 0; for (var lf = 1; lf < lArr.length; lf++) if (lArr[lf] > lArr[lMx]) lMx = lf; lArr[lMx] += lRem; }
+          for (var lk3 = 0; lk3 < allSkus.length; lk3++) byLid[allSkus[lk3]][wki] += lArr[lk3];
+        }
       }
     }
   }
 
-  return { weeks: weeks, bySku: bySku };
+  return { weeks: weeks, byBase: byBase, byLid: byLid };
 }
 
 export default function ShipScheduleTab({ sc, ships, prod, gld }) {
   var skuDemand = useMemo(function() { return calcSkuDemand(sc.markets); }, [sc.markets]);
   var schedule = useMemo(function() { return buildSchedule(ships, skuDemand); }, [ships, skuDemand]);
 
-  // Build grouped rows
+  // Build grouped lid rows (for LIDS section)
   var groups = useMemo(function() {
     var out = [];
     for (var gi = 0; gi < GROUPS.length; gi++) {
@@ -124,7 +154,6 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
       }
       out.push({ name: gName, baseSku: BASE_TYPES[gName].sku, rows: rows });
     }
-    // Add unmapped row if any
     if (skuDemand._unmapped) {
       var mappedSkus = {};
       for (var mi = 0; mi < MASTER_SKUS.length; mi++) mappedSkus[MASTER_SKUS[mi].sku] = true;
@@ -156,7 +185,8 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
   }, [prod, ships, gld]);
 
   var wks = schedule.weeks;
-  var byS = schedule.bySku;
+  var byBase = schedule.byBase;
+  var byLid = schedule.byLid;
   var noShips = wks.length === 0;
 
   // Compute dominant shipping method color per week column
@@ -266,56 +296,33 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
               </tr>
             </thead>
             <tbody>
-              {/* ═══ BASES SECTION ═══ */}
+              {/* ═══ BASES SECTION (PB- base types, from bQ) ═══ */}
               <tr>
                 <td colSpan={2 + wks.length + 1} style={{ ...td, fontWeight: 700, color: T.GR, fontSize: 12, background: T.GR + "10", borderTop: "2px solid " + T.GR, borderBottom: "2px solid " + T.GR, padding: "6px 8px", position: "sticky", left: 0, zIndex: 2 }}>
                   BASES
                 </td>
               </tr>
 
-              {groups.map(function(g, gi2) {
-                var gc = GROUP_COLORS[g.name];
-                var groupWkTotals = new Array(wks.length).fill(0);
-                var groupGrand = 0;
-                for (var ri2 = 0; ri2 < g.rows.length; ri2++) {
-                  var skuWk = byS[g.rows[ri2].sku] || new Array(wks.length).fill(0);
-                  for (var wi3 = 0; wi3 < wks.length; wi3++) { groupWkTotals[wi3] += (skuWk[wi3] || 0); groupGrand += (skuWk[wi3] || 0); }
-                }
-
-                var headerRow = (
-                  <tr key={"shdr-" + gi2}>
-                    <td colSpan={2} style={{ ...td, fontWeight: 700, color: gc.tx, background: gc.hd, fontSize: 11, borderBottom: "2px solid " + gc.hd, position: "sticky", left: 0, zIndex: 3 }}>
-                      {g.name} ({g.baseSku})
+              {GROUPS.map(function(gName, gi2) {
+                var gc = GROUP_COLORS[gName];
+                var baseWk = byBase[gName] || new Array(wks.length).fill(0);
+                var baseGrand = 0;
+                for (var bwi = 0; bwi < wks.length; bwi++) baseGrand += (baseWk[bwi] || 0);
+                return (
+                  <tr key={"base-" + gi2} style={{ background: gi2 % 2 === 0 ? "transparent" : T.S2 + "60" }}>
+                    <td style={{ ...td, fontWeight: 600, fontSize: 11, position: "sticky", left: 0, zIndex: 2, background: gi2 % 2 === 0 ? T.S1 : T.S2 + "60" }}>
+                      <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: gc.hd, marginRight: 6, verticalAlign: "middle" }}></span>
+                      <span style={{ color: T.TX }}>{gName}</span>
+                      <span style={{ marginLeft: 6, fontSize: 9, color: T.T2 + "90" }}>{BASE_TYPES[gName].sku}</span>
                     </td>
-                    {groupWkTotals.map(function(v, wi4) {
-                      return <td key={wi4} style={{ ...td, textAlign: "right", fontWeight: 700, color: v > 0 ? weekMC[wi4] : gc.tx, background: gc.hd, fontSize: 10, borderBottom: "2px solid " + gc.hd }}>{v > 0 ? fm(Math.round(v)) : ""}</td>;
+                    <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2 }}>Base</td>
+                    {baseWk.map(function(v, wi3) {
+                      var hasVal = v > 0;
+                      return <td key={wi3} style={{ ...td, textAlign: "right", color: hasVal ? weekMC[wi3] : T.T2 + "30", fontWeight: hasVal ? 600 : 400, fontSize: 11, background: hasVal ? weekMC[wi3] + "10" : undefined }}>{hasVal ? fm(Math.round(v)) : ""}</td>;
                     })}
-                    <td style={{ ...td, textAlign: "right", fontWeight: 700, color: gc.tx, background: gc.hd, fontSize: 10, borderBottom: "2px solid " + gc.hd }}>{fm(Math.round(groupGrand))}</td>
+                    <td style={{ ...td, textAlign: "right", fontWeight: 700, fontSize: 11 }}>{baseGrand > 0 ? fm(Math.round(baseGrand)) : ""}</td>
                   </tr>
                 );
-
-                var dataRows = g.rows.map(function(row, rowIdx) {
-                  var skuWeekly = byS[row.sku] || new Array(wks.length).fill(0);
-                  var rowTotal = 0;
-                  for (var rti = 0; rti < wks.length; rti++) rowTotal += (skuWeekly[rti] || 0);
-
-                  return (
-                    <tr key={"srow-" + gi2 + "-" + rowIdx} style={{ background: rowIdx % 2 === 0 ? "transparent" : T.S2 + "60" }}>
-                      <td style={{ ...td, fontWeight: 500, fontSize: 11, position: "sticky", left: 0, zIndex: 2, background: rowIdx % 2 === 0 ? T.S1 : T.S2 + "60" }}>
-                        <span style={{ color: T.TX }}>{row.name}</span>
-                        <span style={{ marginLeft: 6, fontSize: 9, color: T.T2 + "90" }}>{row.sku !== "_unmapped" ? row.sku : ""}</span>
-                      </td>
-                      <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2 }}>{row.cat}</td>
-                      {skuWeekly.map(function(v, wi5) {
-                        var hasVal = v > 0;
-                        return <td key={wi5} style={{ ...td, textAlign: "right", color: hasVal ? weekMC[wi5] : T.T2 + "30", fontWeight: hasVal ? 600 : 400, fontSize: 11, background: hasVal ? weekMC[wi5] + "10" : undefined }}>{hasVal ? fm(Math.round(v)) : ""}</td>;
-                      })}
-                      <td style={{ ...td, textAlign: "right", fontWeight: 700, fontSize: 11 }}>{rowTotal > 0 ? fm(Math.round(rowTotal)) : ""}</td>
-                    </tr>
-                  );
-                });
-
-                return [headerRow].concat(dataRows);
               })}
 
               {/* Bases Subtotal */}
@@ -334,14 +341,59 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
                 );
               })()}
 
-              {/* ═══ LIDS SECTION ═══ */}
+              {/* ═══ LIDS SECTION (PL- lid SKUs, from lQ) ═══ */}
               <tr>
                 <td colSpan={2 + wks.length + 1} style={{ ...td, fontWeight: 700, color: T.AC, fontSize: 12, background: T.AC + "10", borderTop: "3px solid " + T.AC, borderBottom: "2px solid " + T.AC, padding: "6px 8px", position: "sticky", left: 0, zIndex: 2 }}>
                   LIDS
                 </td>
               </tr>
 
-              {/* Lids per shipment week */}
+              {groups.map(function(g, gi2) {
+                var gc = GROUP_COLORS[g.name];
+                var groupWkTotals = new Array(wks.length).fill(0);
+                var groupGrand = 0;
+                for (var ri2 = 0; ri2 < g.rows.length; ri2++) {
+                  var skuWk = byLid[g.rows[ri2].sku] || new Array(wks.length).fill(0);
+                  for (var wi3 = 0; wi3 < wks.length; wi3++) { groupWkTotals[wi3] += (skuWk[wi3] || 0); groupGrand += (skuWk[wi3] || 0); }
+                }
+
+                var headerRow = (
+                  <tr key={"lhdr-" + gi2}>
+                    <td colSpan={2} style={{ ...td, fontWeight: 700, color: gc.tx, background: gc.hd, fontSize: 11, borderBottom: "2px solid " + gc.hd, position: "sticky", left: 0, zIndex: 3 }}>
+                      {g.name} Lids
+                    </td>
+                    {groupWkTotals.map(function(v, wi4) {
+                      return <td key={wi4} style={{ ...td, textAlign: "right", fontWeight: 700, color: v > 0 ? weekMC[wi4] : gc.tx, background: gc.hd, fontSize: 10, borderBottom: "2px solid " + gc.hd }}>{v > 0 ? fm(Math.round(v)) : ""}</td>;
+                    })}
+                    <td style={{ ...td, textAlign: "right", fontWeight: 700, color: gc.tx, background: gc.hd, fontSize: 10, borderBottom: "2px solid " + gc.hd }}>{fm(Math.round(groupGrand))}</td>
+                  </tr>
+                );
+
+                var dataRows = g.rows.map(function(row, rowIdx) {
+                  var skuWeekly = byLid[row.sku] || new Array(wks.length).fill(0);
+                  var rowTotal = 0;
+                  for (var rti = 0; rti < wks.length; rti++) rowTotal += (skuWeekly[rti] || 0);
+
+                  return (
+                    <tr key={"lrow-" + gi2 + "-" + rowIdx} style={{ background: rowIdx % 2 === 0 ? "transparent" : T.S2 + "60" }}>
+                      <td style={{ ...td, fontWeight: 500, fontSize: 11, position: "sticky", left: 0, zIndex: 2, background: rowIdx % 2 === 0 ? T.S1 : T.S2 + "60" }}>
+                        <span style={{ color: T.TX }}>{row.name}</span>
+                        <span style={{ marginLeft: 6, fontSize: 9, color: T.T2 + "90" }}>{row.sku !== "_unmapped" ? row.sku : ""}</span>
+                      </td>
+                      <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2 }}>{row.cat}</td>
+                      {skuWeekly.map(function(v, wi5) {
+                        var hasVal = v > 0;
+                        return <td key={wi5} style={{ ...td, textAlign: "right", color: hasVal ? weekMC[wi5] : T.T2 + "30", fontWeight: hasVal ? 600 : 400, fontSize: 11, background: hasVal ? weekMC[wi5] + "10" : undefined }}>{hasVal ? fm(Math.round(v)) : ""}</td>;
+                      })}
+                      <td style={{ ...td, textAlign: "right", fontWeight: 700, fontSize: 11 }}>{rowTotal > 0 ? fm(Math.round(rowTotal)) : ""}</td>
+                    </tr>
+                  );
+                });
+
+                return [headerRow].concat(dataRows);
+              })}
+
+              {/* Lids Subtotal */}
               {(function() {
                 var lT = new Array(wks.length).fill(0);
                 for (var wi7 = 0; wi7 < wks.length; wi7++) {
@@ -349,26 +401,10 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
                 }
                 var lidsGrand = 0; for (var gi4 = 0; gi4 < wks.length; gi4++) lidsGrand += lT[gi4];
                 return (
-                  <tr style={{ background: T.AC + "08" }}>
-                    <td colSpan={2} style={{ ...td, fontWeight: 600, color: T.AC, fontSize: 11, position: "sticky", left: 0, zIndex: 2, background: T.AC + "08" }}>Lid Quantity</td>
-                    {lT.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 600, color: v > 0 ? weekMC[i] : T.AC, fontSize: 11, background: v > 0 ? weekMC[i] + "10" : undefined }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
-                    <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AC, fontSize: 12 }}>{fm(Math.round(lidsGrand))}</td>
-                  </tr>
-                );
-              })()}
-
-              {/* Lids Subtotal */}
-              {(function() {
-                var lT2 = new Array(wks.length).fill(0);
-                for (var wi8 = 0; wi8 < wks.length; wi8++) {
-                  for (var sli2 = 0; sli2 < wks[wi8].shipments.length; sli2++) lT2[wi8] += (wks[wi8].shipments[sli2].lQ || 0);
-                }
-                var lidsGrand2 = 0; for (var gi5 = 0; gi5 < wks.length; gi5++) lidsGrand2 += lT2[gi5];
-                return (
                   <tr style={{ background: T.AC + "10" }}>
                     <td colSpan={2} style={{ ...td, fontWeight: 700, color: T.AC, borderTop: "2px solid " + T.AC, fontSize: 11, position: "sticky", left: 0, zIndex: 2, background: T.AC + "10" }}>LIDS SUBTOTAL</td>
-                    {lT2.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: v > 0 ? weekMC[i] : T.AC, borderTop: "2px solid " + T.AC, fontSize: 11 }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
-                    <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AC, borderTop: "2px solid " + T.AC, fontSize: 12 }}>{fm(Math.round(lidsGrand2))}</td>
+                    {lT.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: v > 0 ? weekMC[i] : T.AC, borderTop: "2px solid " + T.AC, fontSize: 11 }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
+                    <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AC, borderTop: "2px solid " + T.AC, fontSize: 12 }}>{fm(Math.round(lidsGrand))}</td>
                   </tr>
                 );
               })()}
