@@ -16,20 +16,36 @@ function buildSchedule(ships, skuDemand) {
   // Collect all SKU codes that have demand
   var allSkus = Object.keys(skuDemand);
 
-  // Group shipments by departure week (snap to start of week — Sunday)
+  // Pre-compute annual demand per SKU (fallback for months with zero demand)
+  var annualDem = {};
+  var totalAnnualDem = 0;
+  for (var ai = 0; ai < allSkus.length; ai++) {
+    var annSum = 0;
+    var d2 = skuDemand[allSkus[ai]];
+    if (d2) for (var am = 0; am < 12; am++) annSum += (d2[am] || 0);
+    annualDem[allSkus[ai]] = annSum;
+    totalAnnualDem += annSum;
+  }
+
+  // Snap date to the production-week grid (every 7 days from Mar 9 2026)
+  var PROD_START = new Date(2026, 2, 9).getTime(); // Mar 9 local
+  var WEEK_MS = 7 * 86400000;
+  function snapToProductionWeek(date) {
+    var t = date.getTime();
+    var diff = t - PROD_START;
+    var wkIdx = Math.round(diff / WEEK_MS);
+    return new Date(PROD_START + wkIdx * WEEK_MS);
+  }
+
+  // Group shipments by production week (same grid as unified view)
   var weekMap = {};
   for (var i = 0; i < ships.length; i++) {
     var sh = ships[i];
     if (!sh.bSd || sh.bQ <= 0) continue;
-    // Snap to Monday of the week
-    var d = new Date(sh.bSd);
-    var day = d.getDay();
-    var diff = day === 0 ? -6 : 1 - day; // Monday = 1
-    var monday = new Date(d);
-    monday.setDate(monday.getDate() + diff);
-    monday.setHours(0,0,0,0);
-    var key = monday.getTime();
-    if (!weekMap[key]) weekMap[key] = { wk: monday, shipments: [] };
+    var snapped = snapToProductionWeek(new Date(sh.bSd));
+    snapped.setHours(0,0,0,0);
+    var key = snapped.getTime();
+    if (!weekMap[key]) weekMap[key] = { wk: snapped, shipments: [] };
     weekMap[key].shipments.push(sh);
   }
 
@@ -38,7 +54,7 @@ function buildSchedule(ships, skuDemand) {
   var weeks = [];
   for (var wi = 0; wi < weekKeys.length; wi++) weeks.push(weekMap[weekKeys[wi]]);
 
-  // For each week, distribute total bQ across SKUs proportionally by target month demand
+  // For each week, distribute total bQ across SKUs proportionally
   var bySku = {};
   for (var si = 0; si < allSkus.length; si++) bySku[allSkus[si]] = new Array(weeks.length).fill(0);
 
@@ -47,24 +63,30 @@ function buildSchedule(ships, skuDemand) {
     for (var shi = 0; shi < wkShips.length; shi++) {
       var s = wkShips[shi];
       var mo = s.mo;
-      if (mo == null || mo < 0 || mo > 11) continue;
 
-      // Compute total demand for this month across all SKUs
-      var totalMonthDem = 0;
-      for (var ski = 0; ski < allSkus.length; ski++) {
-        var dem = skuDemand[allSkus[ski]];
-        if (dem) totalMonthDem += (dem[mo] || 0);
+      // Try target month demand first; fall back to annual if month has zero demand
+      var useMonthly = false;
+      var totalDem = 0;
+      if (mo != null && mo >= 0 && mo <= 11) {
+        for (var ski = 0; ski < allSkus.length; ski++) {
+          var dem = skuDemand[allSkus[ski]];
+          if (dem) totalDem += (dem[mo] || 0);
+        }
+        if (totalDem > 0) useMonthly = true;
       }
-      if (totalMonthDem <= 0) continue;
+      if (!useMonthly) totalDem = totalAnnualDem;
+      if (totalDem <= 0) continue;
 
       // Distribute bQ proportionally
       var allocated = 0;
       var skuAllocs = [];
       for (var ski2 = 0; ski2 < allSkus.length; ski2++) {
         var skuCode = allSkus[ski2];
-        var skuMoDem = (skuDemand[skuCode] && skuDemand[skuCode][mo]) || 0;
-        if (skuMoDem <= 0) { skuAllocs.push(0); continue; }
-        var share = Math.round(s.bQ * skuMoDem / totalMonthDem);
+        var skuDem = useMonthly
+          ? ((skuDemand[skuCode] && skuDemand[skuCode][mo]) || 0)
+          : (annualDem[skuCode] || 0);
+        if (skuDem <= 0) { skuAllocs.push(0); continue; }
+        var share = Math.round(s.bQ * skuDem / totalDem);
         skuAllocs.push(share);
         allocated += share;
       }
