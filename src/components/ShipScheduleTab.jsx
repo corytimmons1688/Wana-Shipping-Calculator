@@ -5,7 +5,8 @@ import { fm, dF } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 
 var GROUPS = ["Black Sparkle", "White"];
-var GROUP_COLORS = { "Black Sparkle": { hd: "#1a1a2e", tx: "#fff" }, "White": { hd: "#6b7280", tx: "#fff" } };
+var GROUP_COLORS = { "Black Sparkle": { hd: "#334155", tx: "#fff" }, "White": { hd: "#94a3b8", tx: "#fff" } };
+var LID_GROUP_NAMES = { "Black Sparkle": "Black Sparkle Lids", "White": "Custom Color Lids" };
 var METHOD_COLORS = { "Standard Ocean": T.GR, "Fast Boat": T.AC, "Air": T.AM };
 
 // Build weekly schedule: bQ → base types, lQ → lid SKUs
@@ -360,7 +361,7 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
                 var headerRow = (
                   <tr key={"lhdr-" + gi2}>
                     <td colSpan={2} style={{ ...td, fontWeight: 700, color: gc.tx, background: gc.hd, fontSize: 11, borderBottom: "2px solid " + gc.hd, position: "sticky", left: 0, zIndex: 3 }}>
-                      {g.name} Lids
+                      {LID_GROUP_NAMES[g.name] || g.name + " Lids"}
                     </td>
                     {groupWkTotals.map(function(v, wi4) {
                       return <td key={wi4} style={{ ...td, textAlign: "right", fontWeight: 700, color: v > 0 ? weekMC[wi4] : gc.tx, background: gc.hd, fontSize: 10, borderBottom: "2px solid " + gc.hd }}>{v > 0 ? fm(Math.round(v)) : ""}</td>;
