@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { MASTER_SKUS, BASE_TYPES } from "../data/skuMaster";
-import { calcSkuDemand } from "../utils/calc";
+import { calcSkuDemand, calcGLD } from "../utils/calc";
 import { fm, dF } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 
@@ -35,10 +35,11 @@ function buildSchedule(ships, skuDemand) {
   }
 
   // Group shipments by production week (same grid as unified view)
+  // Include shipments with bQ > 0 OR lQ > 0
   var weekMap = {};
   for (var i = 0; i < ships.length; i++) {
     var sh = ships[i];
-    if (!sh.bSd || sh.bQ <= 0) continue;
+    if (!sh.bSd || (sh.bQ <= 0 && sh.lQ <= 0)) continue;
     var snapped = snapToProductionWeek(new Date(sh.bSd));
     snapped.setHours(0,0,0,0);
     var key = snapped.getTime();
@@ -57,6 +58,7 @@ function buildSchedule(ships, skuDemand) {
     var wkShips = weeks[wki].shipments;
     for (var shi = 0; shi < wkShips.length; shi++) {
       var s = wkShips[shi];
+      if (s.bQ <= 0) continue; // SKU allocation only for bases
 
       // Use ARRIVAL month for proportions
       var arrMo = s.bAr ? s.bAr.getMonth() : (s.mo != null ? s.mo : -1);
@@ -103,7 +105,7 @@ function buildSchedule(ships, skuDemand) {
   return { weeks: weeks, bySku: bySku };
 }
 
-export default function ShipScheduleTab({ sc, ships }) {
+export default function ShipScheduleTab({ sc, ships, prod, gld }) {
   var skuDemand = useMemo(function() { return calcSkuDemand(sc.markets); }, [sc.markets]);
   var schedule = useMemo(function() { return buildSchedule(ships, skuDemand); }, [ships, skuDemand]);
 
@@ -138,24 +140,81 @@ export default function ShipScheduleTab({ sc, ships }) {
     return out;
   }, [skuDemand]);
 
+  // Pipeline summary: totals for bases and lids at each stage
+  var pipeline = useMemo(function() {
+    if (!prod || prod.length === 0 || !ships) return null;
+    var last = prod[prod.length - 1];
+    var shippedB = 0, shippedL = 0;
+    for (var i = 0; i < ships.length; i++) { shippedB += (ships[i].bQ || 0); shippedL += (ships[i].lQ || 0); }
+    var totalDemand = 0;
+    if (gld) for (var m = 0; m < 12; m++) totalDemand += (gld[m] || 0);
+    return {
+      base: { prod: last.bC, shipped: shippedB, demand: totalDemand, delta: shippedB - totalDemand },
+      lid:  { prod: last.lC, shipped: shippedL, demand: totalDemand, delta: shippedL - totalDemand }
+    };
+  }, [prod, ships, gld]);
+
   var wks = schedule.weeks;
   var byS = schedule.bySku;
   var noShips = wks.length === 0;
 
-  var totalScheduled = 0;
-  for (var tsi = 0; tsi < (ships || []).length; tsi++) totalScheduled += ((ships[tsi].bQ || 0));
+  var totalBasesScheduled = 0, totalLidsScheduled = 0;
+  for (var tsi = 0; tsi < (ships || []).length; tsi++) {
+    totalBasesScheduled += (ships[tsi].bQ || 0);
+    totalLidsScheduled += (ships[tsi].lQ || 0);
+  }
 
   return (
     <div style={{ padding: "14px 18px" }}>
-      {/* Summary Cards */}
+      {/* Pipeline Summary Cards: Bases & Lids */}
+      {pipeline && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+          {[{label:"Bases",color:T.GR,d:pipeline.base},{label:"Lids",color:T.AC,d:pipeline.lid}].map(function(it) {
+            var d = it.d;
+            var covPct = d.demand > 0 ? Math.round(d.shipped / d.demand * 100) : 0;
+            return (
+              <div key={it.label} style={{ flex:"1 1 300px", background:T.S2, borderRadius:7, padding:"10px 14px", border:"1px solid "+it.color, minWidth:300 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                  <span style={{ color:it.color, fontWeight:700, fontSize:13 }}>{it.label}</span>
+                  <span style={{ color:T.T2, fontSize:10 }}>{covPct}% of demand shipped</span>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ color:T.T2, fontSize:9, textTransform:"uppercase" }}>Produced</div>
+                    <div style={{ color:it.color, fontWeight:700, fontSize:14, fontFamily:"'JetBrains Mono',monospace" }}>{fm(d.prod)}</div>
+                  </div>
+                  <span style={{ color:T.T2, fontSize:14 }}>{"\u2192"}</span>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ color:T.T2, fontSize:9, textTransform:"uppercase" }}>Shipped</div>
+                    <div style={{ color:it.color, fontWeight:700, fontSize:14, fontFamily:"'JetBrains Mono',monospace" }}>{fm(d.shipped)}</div>
+                  </div>
+                  <span style={{ color:T.T2, fontSize:14 }}>{"\u2192"}</span>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ color:T.T2, fontSize:9, textTransform:"uppercase" }}>Demand</div>
+                    <div style={{ fontWeight:700, fontSize:14, fontFamily:"'JetBrains Mono',monospace" }}>{fm(d.demand)}</div>
+                  </div>
+                  <span style={{ color:T.T2, fontSize:14 }}>=</span>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ color:T.T2, fontSize:9, textTransform:"uppercase" }}>{d.delta >= 0 ? "Surplus" : "Shortfall"}</div>
+                    <div style={{ color:d.delta<0?"#dc2626":it.color, fontWeight:700, fontSize:14, fontFamily:"'JetBrains Mono',monospace" }}>{d.delta>=0?"+":""}{fm(d.delta)}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Counts row */}
       <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
         {[
-          { l: "Total Scheduled", v: fm(Math.round(totalScheduled)), c: T.AC },
-          { l: "Shipments", v: (ships || []).length, c: T.GR },
+          { l: "Bases Shipped", v: fm(Math.round(totalBasesScheduled)), c: T.GR },
+          { l: "Lids Shipped", v: fm(Math.round(totalLidsScheduled)), c: T.AC },
+          { l: "Shipments", v: (ships || []).length, c: T.T2 },
           { l: "Ship Weeks", v: wks.length, c: T.AM },
         ].map(function(c2, i) {
           return (
-            <div key={i} style={{ background: T.S2, borderRadius: 7, padding: "8px 14px", border: "1px solid " + T.BD, minWidth: 120 }}>
+            <div key={i} style={{ background: T.S2, borderRadius: 7, padding: "8px 14px", border: "1px solid " + T.BD, minWidth: 110 }}>
               <div style={{ color: T.T2, fontSize: 9, textTransform: "uppercase", marginBottom: 2 }}>{c2.l}</div>
               <div style={{ color: c2.c, fontSize: 17, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{c2.v}</div>
             </div>
@@ -168,7 +227,7 @@ export default function ShipScheduleTab({ sc, ships }) {
           No shipments in the schedule yet. Add shipments in the Shipment Details view first.
         </div>
       ) : (
-        <div style={{ overflowX: "auto", maxHeight: "calc(100vh - 240px)", overflowY: "auto" }}>
+        <div style={{ overflowX: "auto", maxHeight: "calc(100vh - 300px)", overflowY: "auto" }}>
           <table style={tbl}>
             <thead>
               <tr>
@@ -189,6 +248,13 @@ export default function ShipScheduleTab({ sc, ships }) {
               </tr>
             </thead>
             <tbody>
+              {/* ═══ BASES SECTION ═══ */}
+              <tr>
+                <td colSpan={2 + wks.length + 1} style={{ ...td, fontWeight: 700, color: T.GR, fontSize: 12, background: T.GR + "10", borderTop: "2px solid " + T.GR, borderBottom: "2px solid " + T.GR, padding: "6px 8px", position: "sticky", left: 0, zIndex: 2 }}>
+                  BASES
+                </td>
+              </tr>
+
               {groups.map(function(g, gi2) {
                 var gc = GROUP_COLORS[g.name];
                 var groupWkTotals = new Array(wks.length).fill(0);
@@ -234,35 +300,78 @@ export default function ShipScheduleTab({ sc, ships }) {
                 return [headerRow].concat(dataRows);
               })}
 
-              {/* Grand Total Row */}
+              {/* Bases Subtotal */}
               {(function() {
-                var gT = new Array(wks.length).fill(0);
-                for (var tgi = 0; tgi < groups.length; tgi++) {
-                  for (var tri = 0; tri < groups[tgi].rows.length; tri++) {
-                    var skuW = byS[groups[tgi].rows[tri].sku] || new Array(wks.length).fill(0);
-                    for (var twi = 0; twi < wks.length; twi++) gT[twi] += (skuW[twi] || 0);
-                  }
+                var bT = new Array(wks.length).fill(0);
+                for (var wi6 = 0; wi6 < wks.length; wi6++) {
+                  for (var sbi = 0; sbi < wks[wi6].shipments.length; sbi++) bT[wi6] += (wks[wi6].shipments[sbi].bQ || 0);
                 }
-                var grandTotal = 0; for (var gti = 0; gti < wks.length; gti++) grandTotal += gT[gti];
+                var basesGrand = 0; for (var gi3 = 0; gi3 < wks.length; gi3++) basesGrand += bT[gi3];
                 return (
-                  <tr style={{ background: T.AC + "10" }}>
-                    <td colSpan={2} style={{ ...td, fontWeight: 700, color: T.AC, borderTop: "2px solid " + T.AC, position: "sticky", left: 0, zIndex: 2, background: T.AC + "10" }}>TOTAL</td>
-                    {gT.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AC, borderTop: "2px solid " + T.AC }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
-                    <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AC, borderTop: "2px solid " + T.AC }}>{fm(Math.round(grandTotal))}</td>
+                  <tr style={{ background: T.GR + "10" }}>
+                    <td colSpan={2} style={{ ...td, fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR, fontSize: 11, position: "sticky", left: 0, zIndex: 2, background: T.GR + "10" }}>BASES SUBTOTAL</td>
+                    {bT.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR, fontSize: 11 }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
+                    <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR, fontSize: 12 }}>{fm(Math.round(basesGrand))}</td>
                   </tr>
                 );
               })()}
 
-              {/* Per-week shipment total row (bQ totals for validation) */}
-              <tr style={{ background: T.GR + "08" }}>
-                <td colSpan={2} style={{ ...td, fontWeight: 600, color: T.GR, fontSize: 10, position: "sticky", left: 0, zIndex: 2, background: T.GR + "08" }}>Shipment bQ</td>
-                {wks.map(function(w, wi6) {
-                  var wkBQ = 0;
-                  for (var sbi = 0; sbi < w.shipments.length; sbi++) wkBQ += (w.shipments[sbi].bQ || 0);
-                  return <td key={wi6} style={{ ...td, textAlign: "right", fontWeight: 600, color: T.GR, fontSize: 10 }}>{wkBQ > 0 ? fm(wkBQ) : ""}</td>;
-                })}
-                <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.GR, fontSize: 10 }}>{fm(Math.round(totalScheduled))}</td>
+              {/* ═══ LIDS SECTION ═══ */}
+              <tr>
+                <td colSpan={2 + wks.length + 1} style={{ ...td, fontWeight: 700, color: T.AC, fontSize: 12, background: T.AC + "10", borderTop: "3px solid " + T.AC, borderBottom: "2px solid " + T.AC, padding: "6px 8px", position: "sticky", left: 0, zIndex: 2 }}>
+                  LIDS
+                </td>
               </tr>
+
+              {/* Lids per shipment week */}
+              {(function() {
+                var lT = new Array(wks.length).fill(0);
+                for (var wi7 = 0; wi7 < wks.length; wi7++) {
+                  for (var sli = 0; sli < wks[wi7].shipments.length; sli++) lT[wi7] += (wks[wi7].shipments[sli].lQ || 0);
+                }
+                var lidsGrand = 0; for (var gi4 = 0; gi4 < wks.length; gi4++) lidsGrand += lT[gi4];
+                return (
+                  <tr style={{ background: T.AC + "08" }}>
+                    <td colSpan={2} style={{ ...td, fontWeight: 600, color: T.AC, fontSize: 11, position: "sticky", left: 0, zIndex: 2, background: T.AC + "08" }}>Lid Quantity</td>
+                    {lT.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 600, color: T.AC, fontSize: 11, background: v > 0 ? "#eff6ff40" : undefined }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
+                    <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AC, fontSize: 12 }}>{fm(Math.round(lidsGrand))}</td>
+                  </tr>
+                );
+              })()}
+
+              {/* Lids Subtotal */}
+              {(function() {
+                var lT2 = new Array(wks.length).fill(0);
+                for (var wi8 = 0; wi8 < wks.length; wi8++) {
+                  for (var sli2 = 0; sli2 < wks[wi8].shipments.length; sli2++) lT2[wi8] += (wks[wi8].shipments[sli2].lQ || 0);
+                }
+                var lidsGrand2 = 0; for (var gi5 = 0; gi5 < wks.length; gi5++) lidsGrand2 += lT2[gi5];
+                return (
+                  <tr style={{ background: T.AC + "10" }}>
+                    <td colSpan={2} style={{ ...td, fontWeight: 700, color: T.AC, borderTop: "2px solid " + T.AC, fontSize: 11, position: "sticky", left: 0, zIndex: 2, background: T.AC + "10" }}>LIDS SUBTOTAL</td>
+                    {lT2.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AC, borderTop: "2px solid " + T.AC, fontSize: 11 }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
+                    <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AC, borderTop: "2px solid " + T.AC, fontSize: 12 }}>{fm(Math.round(lidsGrand2))}</td>
+                  </tr>
+                );
+              })()}
+
+              {/* ═══ COMBINED TOTAL ═══ */}
+              {(function() {
+                var cT = new Array(wks.length).fill(0);
+                for (var wi9 = 0; wi9 < wks.length; wi9++) {
+                  for (var sci = 0; sci < wks[wi9].shipments.length; sci++) {
+                    cT[wi9] += (wks[wi9].shipments[sci].bQ || 0) + (wks[wi9].shipments[sci].lQ || 0);
+                  }
+                }
+                var combinedGrand = 0; for (var gi6 = 0; gi6 < wks.length; gi6++) combinedGrand += cT[gi6];
+                return (
+                  <tr style={{ background: T.AM + "10" }}>
+                    <td colSpan={2} style={{ ...td, fontWeight: 700, color: T.AM, borderTop: "3px solid " + T.AM, fontSize: 11, position: "sticky", left: 0, zIndex: 2, background: T.AM + "10" }}>TOTAL (B + L)</td>
+                    {cT.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AM, borderTop: "3px solid " + T.AM, fontSize: 11 }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
+                    <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AM, borderTop: "3px solid " + T.AM, fontSize: 12 }}>{fm(Math.round(combinedGrand))}</td>
+                  </tr>
+                );
+              })()}
             </tbody>
           </table>
         </div>

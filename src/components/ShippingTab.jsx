@@ -299,18 +299,6 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
     return rows;
   }, [prod, ships, gld, weeklyDem, sc.shipEdits, sc.shipDeletions, sc.shipAdditions]);
 
-  // Pipeline summary: totals for bases and lids at each stage
-  var pipeline = useMemo(function() {
-    if (unified.length === 0) return null;
-    var last = unified[unified.length - 1];
-    var shippedB = 0, shippedL = 0;
-    for (var mk in frt.byM) { shippedB += frt.byM[mk].b; shippedL += frt.byM[mk].l; }
-    return {
-      base: { prod: last.bC, shipped: shippedB, arrived: last.cumArrB, demand: last.cumDemand, stock: last.stockB },
-      lid:  { prod: last.lC, shipped: shippedL, arrived: last.cumArrL, demand: last.cumDemand, stock: last.stockL }
-    };
-  }, [unified, frt]);
-
   var hlBg = "#dbeafe";
 
   return (
@@ -333,50 +321,6 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
           <div style={{ color:T.T2, fontSize:10 }}>Avg: {frt.units>0?fC(frt.tot/frt.units):"\u2014"}/unit</div>
         </div>
       </div>
-
-      {pipeline && (
-        <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" }}>
-          {[{label:"Bases",color:T.GR,d:pipeline.base},{label:"Lids",color:T.AC,d:pipeline.lid}].map(function(it) {
-            var d = it.d;
-            var inTransit = d.shipped - d.arrived;
-            var pct = d.prod > 0 ? Math.round(d.arrived / d.prod * 100) : 0;
-            return (
-              <div key={it.label} style={{ flex:"1 1 300px", background:T.S2, borderRadius:7, padding:"10px 14px", border:"1px solid "+it.color, minWidth:300 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                  <span style={{ color:it.color, fontWeight:700, fontSize:13 }}>{it.label} Pipeline</span>
-                  <span style={{ color:T.T2, fontSize:10 }}>{pct}% delivered</span>
-                </div>
-                <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-                  <div style={{ textAlign:"center" }}>
-                    <div style={{ color:T.T2, fontSize:9, textTransform:"uppercase" }}>Produced</div>
-                    <div style={{ color:it.color, fontWeight:700, fontSize:14, fontFamily:"'JetBrains Mono',monospace" }}>{fm(d.prod)}</div>
-                  </div>
-                  <span style={{ color:T.T2, fontSize:14 }}>\u2192</span>
-                  <div style={{ textAlign:"center" }}>
-                    <div style={{ color:T.T2, fontSize:9, textTransform:"uppercase" }}>Shipped</div>
-                    <div style={{ color:it.color, fontWeight:700, fontSize:14, fontFamily:"'JetBrains Mono',monospace" }}>{fm(d.shipped)}</div>
-                  </div>
-                  <span style={{ color:T.T2, fontSize:14 }}>\u2192</span>
-                  <div style={{ textAlign:"center" }}>
-                    <div style={{ color:T.T2, fontSize:9, textTransform:"uppercase" }}>At Calyx</div>
-                    <div style={{ color:it.color, fontWeight:700, fontSize:14, fontFamily:"'JetBrains Mono',monospace" }}>{fm(d.arrived)}</div>
-                  </div>
-                  <span style={{ color:T.T2, fontSize:14 }}>\u2192</span>
-                  <div style={{ textAlign:"center" }}>
-                    <div style={{ color:T.T2, fontSize:9, textTransform:"uppercase" }}>Stock</div>
-                    <div style={{ color:d.stock<0?"#dc2626":it.color, fontWeight:700, fontSize:14, fontFamily:"'JetBrains Mono',monospace" }}>{d.stock>=0?"+":""}{fm(d.stock)}</div>
-                  </div>
-                </div>
-                <div style={{ display:"flex", gap:12, marginTop:6, fontSize:10, color:T.T2 }}>
-                  <span>In Transit: <span style={{ color:it.color, fontWeight:600 }}>{fm(inTransit > 0 ? inTransit : 0)}</span></span>
-                  <span>Demand: <span style={{ fontWeight:600 }}>{fm(d.demand)}</span></span>
-                  <span>{d.stock >= 0 ? "Surplus" : "Shortfall"}: <span style={{ color:d.stock<0?"#dc2626":it.color, fontWeight:600 }}>{fm(Math.abs(d.stock))}</span></span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       <div style={{ display:"flex", gap:8, marginBottom:12, alignItems:"center", flexWrap:"wrap" }}>
         {hasShipEdits && (
@@ -680,39 +624,6 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                 return result;
               })}
             </tbody>
-            {pipeline && (
-              <tfoot>
-                {[{label:"Bases Total",color:T.GR,d:pipeline.base,isBase:true},{label:"Lids Total",color:T.AC,d:pipeline.lid,isBase:false}].map(function(it) {
-                  var d = it.d;
-                  var tfStyle = { ...td, fontWeight:700, fontSize:12, borderTop:"2px solid "+it.color, background:it.color+"08" };
-                  return (
-                    <tr key={it.label}>
-                      <td style={{ ...tfStyle, color:it.color }}>{it.label}</td>
-                      <td style={{ ...tfStyle, textAlign:"right", color:it.color }}></td>
-                      <td style={{ ...tfStyle, textAlign:"right" }}></td>
-                      <td style={{ ...tfStyle, textAlign:"right", color:it.color }}>{fm(d.prod)}</td>
-                      <td style={{ ...tfStyle, textAlign:"right" }}></td>
-                      <td style={{ ...tfStyle, textAlign:"right" }}></td>
-                      <td style={{ ...tfStyle, borderRight:"3px solid "+T.AC }}></td>
-                      <td style={tfStyle}></td>
-                      <td style={{ ...tfStyle, textAlign:"right", color:it.color }}>{it.isBase ? fm(d.shipped) : ""}</td>
-                      <td style={{ ...tfStyle, textAlign:"right", color:it.color }}>{it.isBase ? "" : fm(d.shipped)}</td>
-                      <td style={tfStyle}></td>
-                      <td style={tfStyle}></td>
-                      <td style={tfStyle}></td>
-                      <td style={tfStyle}></td>
-                      <td style={{ ...tfStyle, textAlign:"right", color:it.color, borderLeft:"3px solid "+T.AM }}>{it.isBase ? fm(d.arrived) : ""}</td>
-                      <td style={{ ...tfStyle, textAlign:"right", color:it.color }}>{it.isBase ? "" : fm(d.arrived)}</td>
-                      <td style={tfStyle}></td>
-                      <td style={{ ...tfStyle, textAlign:"right" }}>{fm(d.demand)}</td>
-                      <td style={{ ...tfStyle, textAlign:"right", color:it.isBase ? (d.stock<0?"#dc2626":T.GR) : "transparent" }}>{it.isBase ? fm(d.stock) : ""}</td>
-                      <td style={{ ...tfStyle, textAlign:"right", color:it.isBase ? "transparent" : (d.stock<0?"#dc2626":T.AC) }}>{it.isBase ? "" : fm(d.stock)}</td>
-                      <td style={tfStyle}></td>
-                    </tr>
-                  );
-                })}
-              </tfoot>
-            )}
           </table>
         </div>
       )}
@@ -900,7 +811,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
         </div>
       )}
 
-      {sv==="shipschedule" && <ShipScheduleTab sc={sc} ships={ships} />}
+      {sv==="shipschedule" && <ShipScheduleTab sc={sc} ships={ships} prod={prod} gld={gld} />}
 
       {sv==="skuplan" && <SkuPlanTab sc={sc} upd={upd} />}
     </div>
