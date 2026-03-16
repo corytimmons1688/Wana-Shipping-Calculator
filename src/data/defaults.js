@@ -2,8 +2,82 @@ export const MO = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","
 
 const NJ_SKU_DETAIL = {weeks:["2026-04-27", "2026-05-04", "2026-05-11", "2026-05-18", "2026-05-25", "2026-06-01", "2026-06-08", "2026-06-15", "2026-06-22", "2026-06-29", "2026-07-06", "2026-07-13", "2026-07-20", "2026-07-27", "2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24", "2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28", "2026-10-05", "2026-10-12", "2026-10-19", "2026-10-26", "2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30", "2026-12-07", "2026-12-14", "2026-12-21"],skus:[{"cat": "Optimal", "name": "Fast Asleep Grape", "sku": "PL-WCB-120-00", "startWk": 0, "weekly": [1684, 1684, 1684, 1684, 1684, 1684, 1684, 1684, 1684, 1684, 0, 1684, 1684, 1684, 0, 1684, 0, 1684, 0, 1684, 0, 1684, 0, 0, 1684, 0, 0, 1684, 0, 0, 1684, 0, 0, 1684, 0]}, {"cat": "Optimal", "name": "Stay Asleep Dreamberry", "sku": "PL-WCB-110-00", "startWk": 0, "weekly": [4041, 4041, 0, 4041, 0, 4041, 0, 0, 4041, 0, 0, 0, 0, 4041, 0, 4041, 0, 4041, 0, 0, 4041, 0, 4041, 0, 0, 4041, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204]}, {"cat": "Optimal", "name": "Keep Calm Blissberry", "sku": "PL-WCB-125-00", "startWk": 1, "weekly": [0, 1684, 0, 1684, 0, 0, 1684, 1684, 0, 0, 0, 0, 0, 0, 1684, 0, 0, 1684, 0, 0, 0, 1102, 0, 0, 0, 1102, 0, 0, 1102, 0, 0, 1102, 0, 0, 1102]}, {"cat": "Optimal", "name": "Swift Recovery Cherry Cola", "sku": "PL-WCB-115-00", "startWk": 2, "weekly": [0, 0, 3367, 0, 3367, 0, 0, 0, 0, 3367, 0, 0, 0, 0, 0, 0, 0, 3367, 0, 0, 0, 0, 3367, 0, 0, 0, 0, 0, 0, 2204, 0, 0, 0, 2204, 0]}, {"cat": "Quick", "name": "Bubbly Peach", "sku": "PL-WCB-460-00", "startWk": 3, "weekly": [0, 0, 0, 4041, 0, 0, 4041, 0, 0, 0, 4041, 0, 4041, 0, 4041, 0, 4041, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"cat": "Quick", "name": "Peaceful Pear", "sku": "PL-WCB-480-00", "startWk": 4, "weekly": [0, 0, 0, 0, 3367, 3367, 0, 3367, 0, 0, 3367, 0, 0, 3367, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204]}, {"cat": "Quick", "name": "Relaxed Rasberry", "sku": "PL-WCB-485-00", "startWk": 2, "weekly": [0, 0, 3367, 0, 3367, 0, 3367, 0, 0, 0, 3367, 0, 0, 3367, 0, 0, 3367, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204]}, {"cat": "Quick", "name": "Bright Berry Lime", "sku": "PL-WCB-475-00", "startWk": 6, "weekly": [0, 0, 0, 0, 0, 0, 3367, 0, 0, 3367, 0, 3367, 0, 0, 3367, 0, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0]}, {"cat": "Quick", "name": "NJ Sunrise", "sku": "PL-WCB-465-00", "startWk": 5, "weekly": [0, 0, 0, 0, 0, 4041, 0, 0, 3367, 0, 3367, 0, 0, 0, 0, 3367, 0, 0, 3367, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0]}, {"cat": "Quick", "name": "Paradise POG", "sku": "PL-WCB-470-00", "startWk": 5, "weekly": [0, 0, 0, 0, 0, 3367, 0, 0, 3367, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3367, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2204, 0, 0, 0, 0, 2204]}, {"cat": "Classic", "name": "Go Go Mango", "sku": "PL-WCB-405-00", "startWk": 9, "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 3367, 0, 3367, 0, 2204, 0, 2204, 0, 0, 0, 2204, 0, 0, 0, 0, 3367, 0, 0, 3367, 0, 0, 0, 2204, 0, 0, 2204]}, {"cat": "Classic", "name": "Mellow Melon", "sku": "PL-WCB-430-00", "startWk": 7, "weekly": [0, 0, 0, 0, 0, 0, 0, 3367, 0, 0, 0, 3367, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 0, 0, 2204, 0, 0, 0, 2204, 0, 0, 2204, 0, 0]}, {"cat": "Classic", "name": "Blissful Blueberry", "sku": "PL-WCB-415-00", "startWk": 7, "weekly": [0, 0, 0, 0, 0, 0, 0, 4122, 0, 0, 0, 0, 0, 0, 3429, 0, 3429, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204, 0]}, {"cat": "Classic", "name": "Serene Yuzu", "sku": "PL-WCB-410-00", "startWk": 10, "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2204, 0, 0, 0, 0, 0, 0, 2204, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2204, 0, 0, 0, 0, 2204, 0, 0]}, {"cat": "Classic", "name": "Balanced Berry Guava", "sku": "PL-WCB-435-00", "startWk": 12, "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4041, 0, 0, 0, 0, 0, 0, 0, 0, 2204, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2204, 0, 0]}, {"cat": "Optimal", "name": "Chill Black Cherry", "sku": "PL-WCB-425-00", "startWk": 12, "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2020, 0, 0, 1102, 0, 0, 1102, 0, 0, 1102, 0, 0, 1102, 0, 0, 1102, 0, 0, 1102, 0, 0, 1102, 0]}, {"cat": "Classic", "name": "Breezy Pineapple", "sku": "PL-WCB-440-00", "startWk": 12, "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4041, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2204, 0, 0, 0, 0, 0, 0, 0, 0, 2204, 0, 0]}, {"cat": "Classic", "name": "Passion Pineapple", "sku": "PL-WCB-420-00", "startWk": 9, "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 4041, 0, 0, 0, 0, 0, 4041, 0, 0, 4041, 0, 3367, 2204, 0, 0, 0, 0, 0, 0, 2204, 0, 0, 2204, 0, 0, 2204]}, {"cat": "LTO", "name": "Razzcherry Rocket LTO", "sku": "", "startWk": 3, "weekly": [0, 0, 0, 2204, 2204, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}]};
 
+const NY_SKU_DETAIL = {skus:[
+  {"cat":"Optimal","name":"Stay Asleep Dreamberry","sku":"PL-WCB-110-00","startMo":5,"monthly":[0,0,0,0,0,7083,0,9098,9098,11437,12926,13910]},
+  {"cat":"Optimal","name":"Fast Asleep Grape","sku":"PL-WCB-120-00","startMo":5,"monthly":[0,0,0,0,0,4359,0,5598,5598,7038,7955,8560]},
+  {"cat":"Optimal","name":"Keep Calm Blissberry","sku":"PL-WCB-125-00","startMo":5,"monthly":[0,0,0,0,0,2179,0,2799,2799,3519,3977,4280]},
+  {"cat":"Optimal","name":"Swift Recovery Cherry Cola","sku":"PL-WCB-115-00","startMo":7,"monthly":[0,0,0,0,0,0,0,2179,2099,2639,2983,3210]},
+  {"cat":"Optimal","name":"Chill Black Cherry","sku":"PL-WCB-425-00","startMo":7,"monthly":[0,0,0,0,0,0,0,2179,2099,2639,2983,3210]},
+  {"cat":"Optimal","name":"Good Time Clementine","sku":"PL-WCB-105-00","startMo":7,"monthly":[0,0,0,0,0,0,0,726,700,880,994,1070]},
+  {"cat":"Quick","name":"Bubbly Peach","sku":"PL-WCB-460-00","startMo":5,"monthly":[0,0,0,0,0,6538,0,6298,7918,8949,9630,9630]},
+  {"cat":"Quick","name":"NY Sunrise","sku":"PL-WCB-465-00","startMo":5,"monthly":[0,0,0,0,0,5085,0,4899,6158,6960,7490,7490]},
+  {"cat":"Quick","name":"Peaceful Pear","sku":"PL-WCB-480-00","startMo":5,"monthly":[0,0,0,0,0,3814,0,4899,4899,6158,6960,7490]},
+  {"cat":"Quick","name":"Relaxed Rasberry","sku":"PL-WCB-485-00","startMo":5,"monthly":[0,0,0,0,0,3814,0,4899,4899,6158,6960,7490]},
+  {"cat":"Quick","name":"Bright Berry Lime","sku":"PL-WCB-475-00","startMo":5,"monthly":[0,0,0,0,0,4359,0,4199,5279,5966,6420,6420]},
+  {"cat":"Quick","name":"Paradise POG","sku":"PL-WCB-470-00","startMo":7,"monthly":[0,0,0,0,0,0,0,2179,2099,2639,2983,3210]},
+  {"cat":"Classic","name":"Blissful Blueberry","sku":"PL-WCB-415-00","startMo":5,"monthly":[0,0,0,0,0,4359,0,4199,5279,5966,6420,6420]},
+  {"cat":"Classic","name":"Go Go Mango","sku":"PL-WCB-405-00","startMo":5,"monthly":[0,0,0,0,0,4359,0,4199,5279,5966,6420,6420]},
+  {"cat":"Classic","name":"Mellow Melon","sku":"PL-WCB-430-00","startMo":5,"monthly":[0,0,0,0,0,2724,0,3499,3499,4399,4972,5350]},
+  {"cat":"Classic","name":"Serene Yuzu","sku":"PL-WCB-410-00","startMo":5,"monthly":[0,0,0,0,0,1090,0,1400,1400,1760,1989,2140]},
+  {"cat":"Classic","name":"Passion Pineapple","sku":"PL-WCB-420-00","startMo":7,"monthly":[0,0,0,0,0,0,0,4359,4199,5279,5966,6420]},
+  {"cat":"Classic","name":"Balanced Berry Guava","sku":"PL-WCB-435-00","startMo":7,"monthly":[0,0,0,0,0,0,0,1453,1400,1760,1989,2140]},
+  {"cat":"Classic","name":"Breezy Pineapple","sku":"PL-WCB-440-00","startMo":7,"monthly":[0,0,0,0,0,0,0,1453,1400,1760,1989,2140]}
+]};
+
+const CO_SKU_DETAIL = {skus:[
+  {"cat":"Wave 1","name":"Bright Berry Lime","sku":"PL-WCB-475-00","startMo":6,"monthly":[0,0,0,0,0,0,11178,5589,11178,11178,5589,11178]},
+  {"cat":"Wave 1","name":"Bubbly Peach","sku":"PL-WCB-460-00","startMo":6,"monthly":[0,0,0,0,0,0,7844,15689,15689,15689,7844,15689]},
+  {"cat":"Wave 1","name":"Relaxed Raspberry","sku":"PL-WCB-485-00","startMo":6,"monthly":[0,0,0,0,0,0,9022,4511,9022,9022,9022,4511]},
+  {"cat":"Wave 1","name":"Peaceful Pear","sku":"PL-WCB-480-00","startMo":6,"monthly":[0,0,0,0,0,0,11333,5667,11333,11333,5667,11333]},
+  {"cat":"Wave 1","name":"Colorado Sunrise","sku":"PL-WCB-465-00","startMo":6,"monthly":[0,0,0,0,0,0,13289,6644,13289,13289,13289,6644]},
+  {"cat":"Wave 1","name":"Paradise POG","sku":"PL-WCB-470-00","startMo":6,"monthly":[0,0,0,0,0,0,15556,7778,7778,15556,15556,7778]},
+  {"cat":"Wave 2","name":"Hybrid Assorted","sku":"","startMo":7,"monthly":[0,0,0,0,0,0,0,18667,9333,18667,18667,18667]},
+  {"cat":"Wave 2","name":"Indica Assorted","sku":"","startMo":7,"monthly":[0,0,0,0,0,0,0,22222,22222,11111,22222,22222]},
+  {"cat":"Wave 2","name":"Sativa Assorted","sku":"","startMo":7,"monthly":[0,0,0,0,0,0,0,10556,21111,21111,10556,21111]},
+  {"cat":"Wave 2","name":"Fast Asleep Grape","sku":"PL-WCB-120-00","startMo":7,"monthly":[0,0,0,0,0,0,0,9689,19378,19378,9689,19378]},
+  {"cat":"Wave 2","name":"Stay Asleep Dreamberry","sku":"PL-WCB-110-00","startMo":7,"monthly":[0,0,0,0,0,0,0,33333,16667,33333,33333,33333]},
+  {"cat":"Wave 2","name":"Keep Calm Blissberry","sku":"PL-WCB-125-00","startMo":7,"monthly":[0,0,0,0,0,0,0,9067,4533,9067,9067,4533]},
+  {"cat":"Wave 2","name":"Swift Recovery Cherry Cola","sku":"PL-WCB-115-00","startMo":7,"monthly":[0,0,0,0,0,0,0,5022,5022,10044,5022,5022]},
+  {"cat":"Wave 2","name":"Good Time Clementine","sku":"PL-WCB-105-00","startMo":7,"monthly":[0,0,0,0,0,0,0,4756,4756,4756,9511,4756]},
+  {"cat":"Wave 2","name":"Passion Pineapple","sku":"PL-WCB-420-00","startMo":7,"monthly":[0,0,0,0,0,0,0,12889,6444,12889,12889,12889]},
+  {"cat":"Wave 2","name":"Chill Black Cherry","sku":"PL-WCB-425-00","startMo":7,"monthly":[0,0,0,0,0,0,0,9111,4556,4556,4556,4556]},
+  {"cat":"Wave 2","name":"Balanced Berry Guava","sku":"PL-WCB-435-00","startMo":7,"monthly":[0,0,0,0,0,0,0,3956,3956,7911,3956,3956]},
+  {"cat":"Wave 2","name":"Serene Yuzu","sku":"PL-WCB-410-00","startMo":7,"monthly":[0,0,0,0,0,0,0,2000,2000,2000,2000,2000]},
+  {"cat":"Wave 3","name":"Berry Patch Assorted HD","sku":"","startMo":8,"monthly":[0,0,0,0,0,0,0,0,2333,2333,2333,2333]},
+  {"cat":"Wave 3","name":"Stay Asleep Dreamberry 1:1:1 THC:CBG:CBN HD","sku":"","startMo":8,"monthly":[0,0,0,0,0,0,0,0,2333,2333,2333,2333]},
+  {"cat":"Wave 3","name":"Passion Pineapple 1:1:1 THC:CBD:CBG HD","sku":"","startMo":8,"monthly":[0,0,0,0,0,0,0,0,2333,2333,2333,2333]},
+  {"cat":"Wave 3","name":"Tropical Trio Assorted HD","sku":"","startMo":9,"monthly":[0,0,0,0,0,0,0,0,0,4667,2333,2333]},
+  {"cat":"Wave 3","name":"Lemonade Stand Assorted HD","sku":"","startMo":8,"monthly":[0,0,0,0,0,0,0,0,2333,2333,2333,2333]}
+]};
+
+const CO_SKU_DETAIL_OPT2 = {skus:[
+  {"cat":"Wave 2","name":"Fast Asleep Grape","sku":"PL-WCB-120-00","startMo":6,"monthly":[0,0,0,0,0,0,19378,9689,19378,19378,9689,19378]},
+  {"cat":"Wave 2","name":"Stay Asleep Dreamberry","sku":"PL-WCB-110-00","startMo":6,"monthly":[0,0,0,0,0,0,33333,33333,16667,33333,33333,33333]},
+  {"cat":"Wave 2","name":"Keep Calm Blissberry","sku":"PL-WCB-125-00","startMo":6,"monthly":[0,0,0,0,0,0,9067,9067,4533,9067,9067,4533]},
+  {"cat":"Wave 2","name":"Swift Recovery Cherry Cola","sku":"PL-WCB-115-00","startMo":6,"monthly":[0,0,0,0,0,0,5022,5022,5022,10044,5022,5022]},
+  {"cat":"Wave 2","name":"Good Time Clementine","sku":"PL-WCB-105-00","startMo":6,"monthly":[0,0,0,0,0,0,4756,4756,4756,4756,9511,4756]},
+  {"cat":"Wave 1","name":"Bright Berry Lime","sku":"PL-WCB-475-00","startMo":7,"monthly":[0,0,0,0,0,0,0,5589,11178,11178,5589,11178]},
+  {"cat":"Wave 1","name":"Bubbly Peach","sku":"PL-WCB-460-00","startMo":7,"monthly":[0,0,0,0,0,0,0,15689,15689,15689,7844,15689]},
+  {"cat":"Wave 1","name":"Relaxed Raspberry","sku":"PL-WCB-485-00","startMo":7,"monthly":[0,0,0,0,0,0,0,4511,9022,9022,9022,4511]},
+  {"cat":"Wave 1","name":"Peaceful Pear","sku":"PL-WCB-480-00","startMo":7,"monthly":[0,0,0,0,0,0,0,5667,11333,11333,5667,11333]},
+  {"cat":"Wave 1","name":"Colorado Sunrise","sku":"PL-WCB-465-00","startMo":7,"monthly":[0,0,0,0,0,0,0,6644,13289,13289,13289,6644]},
+  {"cat":"Wave 1","name":"Paradise POG","sku":"PL-WCB-470-00","startMo":7,"monthly":[0,0,0,0,0,0,0,7778,7778,15556,15556,7778]},
+  {"cat":"Wave 2","name":"Hybrid Assorted","sku":"","startMo":8,"monthly":[0,0,0,0,0,0,0,0,9333,18667,18667,18667]},
+  {"cat":"Wave 2","name":"Indica Assorted","sku":"","startMo":8,"monthly":[0,0,0,0,0,0,0,0,22222,11111,22222,22222]},
+  {"cat":"Wave 2","name":"Sativa Assorted","sku":"","startMo":8,"monthly":[0,0,0,0,0,0,0,0,21111,21111,10556,21111]},
+  {"cat":"Wave 2","name":"Passion Pineapple","sku":"PL-WCB-420-00","startMo":8,"monthly":[0,0,0,0,0,0,0,0,6444,12889,12889,12889]},
+  {"cat":"Wave 2","name":"Chill Black Cherry","sku":"PL-WCB-425-00","startMo":8,"monthly":[0,0,0,0,0,0,0,0,4556,4556,4556,4556]},
+  {"cat":"Wave 2","name":"Balanced Berry Guava","sku":"PL-WCB-435-00","startMo":8,"monthly":[0,0,0,0,0,0,0,0,3956,7911,3956,3956]},
+  {"cat":"Wave 2","name":"Serene Yuzu","sku":"PL-WCB-410-00","startMo":8,"monthly":[0,0,0,0,0,0,0,0,2000,2000,2000,2000]},
+  {"cat":"Wave 3","name":"Berry Patch Assorted HD","sku":"","startMo":8,"monthly":[0,0,0,0,0,0,0,0,2333,2333,2333,2333]},
+  {"cat":"Wave 3","name":"Stay Asleep Dreamberry 1:1:1 THC:CBG:CBN HD","sku":"","startMo":8,"monthly":[0,0,0,0,0,0,0,0,2333,2333,2333,2333]},
+  {"cat":"Wave 3","name":"Passion Pineapple 1:1:1 THC:CBD:CBG HD","sku":"","startMo":8,"monthly":[0,0,0,0,0,0,0,0,2333,2333,2333,2333]},
+  {"cat":"Wave 3","name":"Tropical Trio Assorted HD","sku":"","startMo":9,"monthly":[0,0,0,0,0,0,0,0,0,4667,2333,2333]},
+  {"cat":"Wave 3","name":"Lemonade Stand Assorted HD","sku":"","startMo":8,"monthly":[0,0,0,0,0,0,0,0,2333,2333,2333,2333]}
+]};
+
 export const MARKETS = [
-  {name:"Colorado",goLive:7,priority:true,demand:[149319,135310,149420,139920,165750,177110,196015,208661,208027,229979,222560,227139]},
+  {name:"Colorado",goLive:7,priority:true,demand:[149319,135310,149420,139920,165750,177110,68222,187146,197599,244889,210100,221221],skuDetail:CO_SKU_DETAIL},
   {name:"Arizona",goLive:8,priority:true,demand:[84630,76440,88660,105000,69750,72000,61132,53940,48720,80600,85050,84630]},
   {name:"Arkansas",goLive:12,priority:false,demand:[13643,11866,15159,14670,12633,12225,14148,14148,13608,14582,14616,13541]},
   {name:"Canada",goLive:null,priority:false,demand:[0,0,0,0,0,0,0,0,0,0,0,0]},
@@ -22,7 +96,7 @@ export const MARKETS = [
   {name:"Nevada",goLive:null,priority:false,demand:[0,0,25500,26288,31320,23870,27280,19080,24180,21600,22320,0]},
   {name:"New Jersey",goLive:4,priority:true,demand:[0,0,0,5725,43470,73152,58621,72307,47999,26724,53019,34744],skuDetail:NJ_SKU_DETAIL},
   {name:"New Mexico",goLive:11,priority:false,demand:[28374,25628,36270,34200,28374,27459,28374,28374,27459,28374,27459,28374]},
-  {name:"New York",goLive:6,priority:true,demand:[13392,16660,19530,19950,19879,27900,39130,50778,61718,78120,75600,78120]},
+  {name:"New York",goLive:6,priority:true,demand:[13392,16660,19530,19950,19879,49763,0,70514,76101,91872,102006,107000],skuDetail:NY_SKU_DETAIL},
   {name:"Ohio",goLive:9,priority:true,demand:[42408,38538,53061,42289,42069,43158,44115,45879,38917,41777,50625,52313]},
   {name:"Oklahoma",goLive:11,priority:false,demand:[5055,5513,6082,6056,5021,4490,5077,6244,4875,5593,4190,5834]},
   {name:"Puerto Rico",goLive:null,priority:false,demand:[0,0,0,0,0,0,0,0,0,0,0,0]},
@@ -62,5 +136,11 @@ export const PKL = [{cont:"20' HC",item:"Wana Jar",pallets:8,qpc:72576,wt:"2,070
 const dc = o => JSON.parse(JSON.stringify(o));
 export function initScenario() {
   return { markets:dc(MARKETS), shipping:dc(SHIPPING), molds:dc(MOLDS), containers:dc(CONTAINERS), params:dc(PARAMS), pallet:dc(PALLET), airCost:dc(AIR_COST), protoMolds:dc(PROTO_MOLDS), equipment:dc(EQUIPMENT), protoTL:dc(PROTO_TL), prodTL:dc(PROD_TL), forecast:dc(FORECAST), pkl:dc(PKL), shipEdits:[], shipAdditions:[], shipDeletions:[] };
+}
+export function initScenarioCOOpt2() {
+  const s = initScenario();
+  const co = s.markets.find(m => m.name === "Colorado");
+  if (co) { co.demand = [149319,135310,149420,139920,165750,177110,71556,107745,197599,244889,210100,221221]; co.skuDetail = dc(CO_SKU_DETAIL_OPT2); }
+  return s;
 }
 export function mkScenario(name, base) { return { id: Date.now()+Math.random(), name, ...dc(base) }; }

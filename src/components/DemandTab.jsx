@@ -71,22 +71,26 @@ export default function DemandTab({ sc, gld, annD, upd }) {
             var skuRows = [];
             if (hasSku && isExp) {
               var detail = mk.skuDetail;
-              // Group weeks into months for display
               for (var si = 0; si < detail.skus.length; si++) {
                 var sku = detail.skus[si];
-                // Sum weekly into monthly
-                var skuMonthly = [0,0,0,0,0,0,0,0,0,0,0,0];
-                for (var wi = 0; wi < sku.weekly.length && wi < detail.weeks.length; wi++) {
-                  var wkDate = new Date(detail.weeks[wi]);
-                  var mo = wkDate.getMonth();
-                  skuMonthly[mo] += sku.weekly[wi];
+                var skuMonthly;
+                if (sku.monthly) {
+                  skuMonthly = sku.monthly;
+                } else {
+                  skuMonthly = [0,0,0,0,0,0,0,0,0,0,0,0];
+                  for (var wi = 0; wi < sku.weekly.length && wi < detail.weeks.length; wi++) {
+                    var wkDate = new Date(detail.weeks[wi]);
+                    var mo = wkDate.getMonth();
+                    skuMonthly[mo] += sku.weekly[wi];
+                  }
                 }
                 var skuAnn = 0;
                 for (var smi = 0; smi < 12; smi++) skuAnn += skuMonthly[smi];
 
-                // Find first demand week for highlight
                 var startMo = -1;
-                if (sku.startWk != null && sku.startWk < detail.weeks.length) {
+                if (sku.startMo != null) {
+                  startMo = sku.startMo;
+                } else if (sku.startWk != null && detail.weeks && sku.startWk < detail.weeks.length) {
                   startMo = new Date(detail.weeks[sku.startWk]).getMonth();
                 }
 

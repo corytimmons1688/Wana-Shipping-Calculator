@@ -474,16 +474,31 @@ export function calcWeeklyDemand(mkts) {
   }
   for (const mk of mkts) {
     if (mk.goLive == null) continue;
-    if (mk.skuDetail && mk.skuDetail.weeks && mk.skuDetail.skus) {
+    if (mk.skuDetail && mk.skuDetail.skus) {
       const det = mk.skuDetail;
       const goLiveMonth = mk.goLive;
-      for (const sku of det.skus) {
-        for (let wi = 0; wi < sku.weekly.length && wi < det.weeks.length; wi++) {
-          if (sku.weekly[wi] <= 0) continue;
-          const skuDate = parseLocalDate(det.weeks[wi]);
-          if (skuDate.getMonth() + 1 < goLiveMonth) continue;
-          for (let pwi = 0; pwi < weeks.length; pwi++) {
-            if (Math.abs(weeks[pwi].wk - skuDate) < 4 * 86400000) { weeks[pwi].demand += sku.weekly[wi]; break; }
+      if (det.weeks) {
+        // Weekly format (NJ)
+        for (const sku of det.skus) {
+          for (let wi = 0; wi < sku.weekly.length && wi < det.weeks.length; wi++) {
+            if (sku.weekly[wi] <= 0) continue;
+            const skuDate = parseLocalDate(det.weeks[wi]);
+            if (skuDate.getMonth() + 1 < goLiveMonth) continue;
+            for (let pwi = 0; pwi < weeks.length; pwi++) {
+              if (Math.abs(weeks[pwi].wk - skuDate) < 4 * 86400000) { weeks[pwi].demand += sku.weekly[wi]; break; }
+            }
+          }
+        }
+      } else {
+        // Monthly format (NY, CO)
+        for (const sku of det.skus) {
+          const monthly = sku.monthly || [];
+          for (let mo = 0; mo < 12; mo++) {
+            if (mo + 1 < goLiveMonth) continue;
+            const mDem = monthly[mo] || 0;
+            if (mDem <= 0) continue;
+            const mWeeks = weeks.filter(w => w.wk.getMonth() === mo);
+            if (mWeeks.length > 0) mWeeks.forEach(w => { w.demand += mDem / mWeeks.length; });
           }
         }
       }

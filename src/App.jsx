@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { useSupabase } from "./hooks/useSupabase";
-import { initScenario, mkScenario } from "./data/defaults";
+import { initScenario, initScenarioCOOpt2, mkScenario } from "./data/defaults";
 import { calcGLD, calcProd, calcCap, calcWeeklyDemand } from "./utils/calc";
 import { fm, f$, fC, dc } from "./utils/format";
 import { T, tbl, th, td } from "./utils/theme";
@@ -11,7 +11,7 @@ import AiAssistant from "./components/AiAssistant";
 
 export default function App() {
   const [tab, setTab] = useState("demand");
-  const [scenarios, setScenarios] = useState(() => [mkScenario("Base Plan", initScenario())]);
+  const [scenarios, setScenarios] = useState(() => [mkScenario("Base Plan", initScenario()), mkScenario("Colorado Option 2", initScenarioCOOpt2())]);
   const [active, setActive] = useState(0);
   const [cmp, setCmp] = useState(false);
   const sc = scenarios[active];
