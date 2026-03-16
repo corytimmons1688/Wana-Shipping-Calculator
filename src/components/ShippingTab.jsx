@@ -810,7 +810,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
         </div>
       )}
 
-      {sv==="skuplan" && <SkuPlanTab sc={sc} upd={upd} />}
+      {sv==="skuplan" && <SkuPlanTab sc={sc} upd={upd} ships={ships} />}
     </div>
   );
 }
