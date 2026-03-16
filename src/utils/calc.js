@@ -514,3 +514,34 @@ export function calcWeeklyDemand(mkts) {
   }
   return weeks;
 }
+
+// ── SKU-level demand aggregation ──────────────────────────────────────────────
+// Sums monthly demand across all active markets by SKU code.
+// Returns { "PL-WCB-105-00": [12 monthly values], "_unmapped": [12], ... }
+export function calcSkuDemand(mkts) {
+  const result = {};
+  for (const mk of mkts) {
+    if (!mk.skuDetail || !mk.skuDetail.skus || mk.goLive == null) continue;
+    const det = mk.skuDetail;
+    for (const sku of det.skus) {
+      const key = sku.sku || "_unmapped";
+      if (!result[key]) result[key] = new Array(12).fill(0);
+      let monthly;
+      if (sku.monthly) {
+        monthly = sku.monthly;
+      } else if (sku.weekly && det.weeks) {
+        // Aggregate weekly → monthly (NJ format)
+        monthly = new Array(12).fill(0);
+        for (let wi = 0; wi < sku.weekly.length && wi < det.weeks.length; wi++) {
+          if (sku.weekly[wi] <= 0) continue;
+          const mo = parseLocalDate(det.weeks[wi]).getMonth();
+          monthly[mo] += sku.weekly[wi];
+        }
+      } else {
+        monthly = new Array(12).fill(0);
+      }
+      for (let m = 0; m < 12; m++) result[key][m] += (monthly[m] || 0);
+    }
+  }
+  return result;
+}

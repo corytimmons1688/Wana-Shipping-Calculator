@@ -72,6 +72,8 @@ export function useSupabase(scenarios, setScenarios) {
           if (!sc.shipDeletions) sc.shipDeletions = [];
           if (!sc.shipAdditions) sc.shipAdditions = [];
           if (!sc.shipEdits) sc.shipEdits = [];
+          // Migrate: ensure skuPlan object exists (added Mar 2026)
+          if (!sc.skuPlan) sc.skuPlan = {};
           // Migrate: patch NY and CO markets with SKU detail + updated demand (Mar 2026 rebrand)
           if (sc.markets) {
             for (const mk of sc.markets) {
